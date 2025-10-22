@@ -243,81 +243,94 @@ async def init_agent(
         f"Callback running before model call for agent: {callback_context.agent_name}"
     )
 
-    feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
-    feature_config = get_feature_config(feature_id)
-    if feature_config and feature_config.get("videoUrl"):
-        video_url = feature_config["videoUrl"]
-        print(f"Video URL: {video_url}")
+    if not callback_context.state.get("video_loaded_to_llm"):
+        feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
+        feature_config = get_feature_config(feature_id)
+        if feature_config and feature_config.get("videoUrl"):
+            video_url = feature_config["videoUrl"]
+            print(f"Video URL: {video_url}")
 
-        artifact_filename = "input_video.mp4"
+            artifact_filename = "input_video.mp4"
 
-        available_files = await callback_context.list_artifacts()
-        print(f"Available artifacts: {available_files}")
+            available_files = await callback_context.list_artifacts()
+            print(f"Available artifacts: {available_files}")
 
-        artifact_part = None
-        if artifact_filename in available_files:
-            print(f"Loading existing artifact: {artifact_filename}")
-            artifact_part = await callback_context.load_artifact(artifact_filename)
+            artifact_part = None
+            if artifact_filename in available_files:
+                print(f"Loading existing artifact: {artifact_filename}")
+                artifact_part = await callback_context.load_artifact(artifact_filename)
 
-        if artifact_part:
-            print(f"Artifact loaded successfully, extracting to temp file...")
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".mp4"
-            ) as tmp_file:
-                if artifact_part.inline_data and artifact_part.inline_data.data:
-                    tmp_file.write(artifact_part.inline_data.data)
-                    tmp_file.flush()
-                    callback_context.state["temp:video"] = tmp_file.name
-                    print(
-                        f"Extracted artifact to temp file: {tmp_file.name}"
-                    )
-                else:
-                    print("Artifact has no inline_data, will re-download")
-                    artifact_part = None
-
-        if not artifact_part:
-            print(f"No artifact found, downloading from {video_url}...")
-            try:
-                bucket_name = video_url.split("/")[2]
-                blob_path = unquote("/".join(video_url.split("/")[3:]))
-
-                storage_client = storage.Client()
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
+            if artifact_part:
+                print(f"Artifact loaded successfully, extracting to temp file...")
                 with tempfile.NamedTemporaryFile(
                     delete=False, suffix=".mp4"
                 ) as tmp_file:
-                    blob.download_to_filename(tmp_file.name)
-
-                    callback_context.state["video_url"] = video_url
-                    callback_context.state["temp:video"] = tmp_file.name
-
-                    try:
-                        with open(tmp_file.name, "rb") as video_file:
-                            video_bytes = video_file.read()
-
-                        video_artifact = types.Part.from_bytes(
-                            data=video_bytes, mime_type="video/mp4"
-                        )
-
-                        version = await callback_context.save_artifact(
-                            filename=artifact_filename, artifact=video_artifact
-                        )
+                    if artifact_part.inline_data and artifact_part.inline_data.data:
+                        tmp_file.write(artifact_part.inline_data.data)
+                        tmp_file.flush()
+                        callback_context.state["temp:video"] = tmp_file.name
                         print(
-                            f"Successfully saved video artifact '{artifact_filename}' as version {version}."
+                            f"Extracted artifact to temp file: {tmp_file.name}"
                         )
+                        
+                        if llm_request.contents and llm_request.contents[0].parts:
+                            llm_request.contents[0].parts.append(artifact_part)
+                            callback_context.state["video_loaded_to_llm"] = True
+                            print("Added video artifact to LLM request")
+                    else:
+                        print("Artifact has no inline_data, will re-download")
+                        artifact_part = None
 
-                    except ValueError as e:
-                        print(
-                            f"Error saving artifact: {e}. Is ArtifactService configured in Runner?"
-                        )
-                    except Exception as e:
-                        print(
-                            f"An unexpected error occurred during artifact save: {e}"
-                        )
+            if not artifact_part:
+                print(f"No artifact found, downloading from {video_url}...")
+                try:
+                    bucket_name = video_url.split("/")[2]
+                    blob_path = unquote("/".join(video_url.split("/")[3:]))
 
-            except Exception as e:
-                print(f"Error downloading video: {e}")
+                    storage_client = storage.Client()
+                    bucket = storage_client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".mp4"
+                    ) as tmp_file:
+                        blob.download_to_filename(tmp_file.name)
+
+                        callback_context.state["video_url"] = video_url
+                        callback_context.state["temp:video"] = tmp_file.name
+
+                        try:
+                            with open(tmp_file.name, "rb") as video_file:
+                                video_bytes = video_file.read()
+
+                            video_artifact = types.Part.from_bytes(
+                                data=video_bytes, mime_type="video/mp4"
+                            )
+
+                            version = await callback_context.save_artifact(
+                                filename=artifact_filename, artifact=video_artifact
+                            )
+                            print(
+                                f"Successfully saved video artifact '{artifact_filename}' as version {version}."
+                            )
+                            
+                            if llm_request.contents and llm_request.contents[0].parts:
+                                llm_request.contents[0].parts.append(video_artifact)
+                                callback_context.state["video_loaded_to_llm"] = True
+                                print("Added video artifact to LLM request")
+
+                        except ValueError as e:
+                            print(
+                                f"Error saving artifact: {e}. Is ArtifactService configured in Runner?"
+                            )
+                        except Exception as e:
+                            print(
+                                f"An unexpected error occurred during artifact save: {e}"
+                            )
+
+                except Exception as e:
+                    print(f"Error downloading video: {e}")
+    else:
+        print("Video already loaded to LLM request, skipping")
 
     return None
 
