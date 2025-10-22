@@ -16,6 +16,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isInitialized = useRef<boolean>(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,6 +43,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
 
   useEffect(() => {
     initializeChat();
+    if(!isInitialized.current){
+      isInitialized.current = true;
+      handleSendMessage('Please make initial recommendations for improving the video based on the feature description provided.');
+    }
   }, [initializeChat]);
 
 
