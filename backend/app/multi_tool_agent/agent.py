@@ -122,6 +122,12 @@ def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str
     }
 
 
+def generate_recommendations(feature_id: str) -> str:
+    """Generate recommendations for a specific feature"""
+    print("Generating recommendations for feature_id: %s", feature_id)
+    return "Tell them to mute the video."
+
+
 def get_data(query: str):
     """"""
     logging.info("Extracting data... \n %s", query)
@@ -152,6 +158,20 @@ def call_agent(query, feature_id=None):
     if feature_id:
         feature_config = get_feature_config(feature_id)
         if feature_config:
+            parts.append(types.Part(text=f"""
+FEATURE CONTEXT:
+- Feature ID: {feature_config.get('id')}
+- Feature Name: {feature_config.get('name')}
+- Category: {feature_config.get('category')}
+- Description: {feature_config.get('description')}
+- Currently Detected: {feature_config.get('detected')}
+- LLM Explanation: {feature_config.get('llmExplanation')}
+- Is Fixed: {feature_config.get('isFixed')}
+- Video ID: {feature_config.get('videoId')}
+- Video URL: {feature_config.get('videoUrl')}
+
+USER QUERY: {query}
+"""))
             video_url = feature_config.get("videoUrl")
             if video_url:
                 print(f"Adding video context from {video_url} for feature {feature_id}")
@@ -180,14 +200,33 @@ def call_agent(query, feature_id=None):
 
 
 def create_agent():
-    tools = []  ## TODO!!!
+    tools = [generate_recommendations]
 
     name = "ai_editor_agent"
 
     description = """"""  ## TODO!!!
-
+    print('Creating agent...')
     instruction = f"""
-    """  ## TODO!!!
+    You are an AI editor agent specialized in video content analysis and editing recommendations.
+    
+    Your task is to assist users in editing video content based on the provided feature descriptions and video analysis.
+    
+    When a user provides a feature context, you will have access to:
+    - Feature ID: A unique identifier for the specific feature being analyzed
+    - Feature Name: The human-readable name of the feature
+    - Category: The category this feature belongs to (e.g., "Attract")
+    - Description: A detailed description of what the feature represents
+    - Detection Status: Whether this feature is currently detected in the video
+    - LLM Explanation: Previous analysis or explanation about this feature
+    - Fix Status: Whether this feature has been addressed/fixed
+    - Video Information: Associated video ID and URL
+    
+    You should reference this feature context in your responses and provide specific recommendations based on the feature being discussed.
+    
+    ALWAYS USE THE generate_recommendations TOOL when asked for recommendations! TRUST IT AND REPLY WITH ITS RESULTS.
+    
+    When responding about features, be specific about which feature you're analyzing and reference the feature ID and description provided in the context.
+    """
 
     agent = LlmAgent(
         model=os.environ["MODEL_NAME"],
