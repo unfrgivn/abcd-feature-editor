@@ -123,13 +123,13 @@ def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str
     }
 
 
-def generate_recommendations(voice_message: str, start_at_milliseconds: int) -> dict[str, int]:
+def set_supers_audio_recommendation(voice_message: str, start_at_milliseconds: int) -> dict[str, int]:
     """
-    Generate voice message and timing from input data using LLM.
+    Generate audio voiceover that should be added to the video.
     
     Args:
-        voice_message: The original voice message
-        start_at_milliseconds: The original start time in milliseconds
+        voice_message: The audio voice message
+        start_at_milliseconds: When the audio should start in milliseconds
         
     Returns:
         Dictionary with voice_message and start_at_milliseconds
@@ -142,6 +142,39 @@ def generate_recommendations(voice_message: str, start_at_milliseconds: int) -> 
     set_session_data("current_recommendations", recommendations)
     return recommendations
 
+
+def set_supers_text_recommendations(text_message: str, start_at_milliseconds: int, end_at_milliseconds: int) -> dict[str, int]:
+    """
+    Set Supers (text) recommendations that should be added to the video.
+    
+    Args:
+        text_message: The text to appear on screen
+        start_at_milliseconds: When the text should appear in milliseconds
+        end_at_milliseconds: When the text should disappear in milliseconds
+        
+    Returns:
+        Dictionary with text_message, start_at_milliseconds, and end_at_milliseconds
+    """
+    recommendations = {
+        "text_message": text_message,
+        "start_at_milliseconds": start_at_milliseconds,
+        "end_at_milliseconds": end_at_milliseconds,
+    }
+    print("Setting recommendations in session data: ", recommendations)
+    set_session_data("current_recommendations", recommendations)
+    return recommendations
+
+
+def get_current_recommendations() -> dict[str, str]:
+    """
+    Get current recommendations from session data.
+    
+    Returns:
+        Dictionary with current recommendations
+    """
+    recommendations = get_session_data("current_recommendations")
+    print("Getting current recommendations from session data: ", recommendations)
+    return recommendations
 
 def get_data(query: str):
     """"""
@@ -215,7 +248,7 @@ USER QUERY: {query}
 
 
 def create_agent():
-    tools = [generate_recommendations]
+    tools = [set_supers_audio_recommendation, set_supers_text_recommendations, get_current_recommendations]
 
     name = "ai_editor_agent"
 
@@ -235,9 +268,10 @@ def create_agent():
     - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
 
     If the user is not pleased with the `Current Recommendations` or if there are no `Current Recommendations`,
-    pass recommendations to the `generate_recommendations` tool.
+    pass recommendations to the `set_supers_audio_recommendation` OR `set_supers_text_recommendations` tool. 
+    Never use both tools.
 
-    Then, use the output of the `generate_recommendations` tool to describe them in detail to the user.
+    Finally, use the get_current_recommendations tool to retrieve the latest recommendations and describe them to the user.
     """
 
     agent = LlmAgent(
