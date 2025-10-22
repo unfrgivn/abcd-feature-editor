@@ -14,6 +14,16 @@ def healthcheck():
     """AI Video Editor healthcheck"""
     return {"status": "Success!"}
 
+@router.get("/config.json")
+def get_config():
+    """Get config.json contents"""
+    import json
+    from pathlib import Path
+
+    config_path = Path(__file__).parent.parent.parent / "config" / "config.json"
+    with open(config_path, "r") as f:
+        config_data = json.load(f)
+    return config_data
 
 @router.post("/call_ai_editor_agent")
 async def call_ai_editor_agent(userQuery: UserQuery):

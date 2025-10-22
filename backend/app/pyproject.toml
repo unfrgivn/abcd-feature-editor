@@ -16,4 +16,5 @@ dependencies = [
   "db-dtypes",
   "google-adk",
   "moviepy>=2.2.1",
+  "google-cloud-texttospeech>=2.32.0",
 ]

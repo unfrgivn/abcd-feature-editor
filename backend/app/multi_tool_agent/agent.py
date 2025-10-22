@@ -20,7 +20,10 @@ from google.cloud import storage
 from google.genai import types
 
 from multi_tool_agent.add_text import add_text_to_video
+from multi_tool_agent.generate_speech_tool import generate_speech_from_text
 from services.bigquery.bigquery_service import bigquery_service
+
+from .session_data import get_session_data, initialize_session_data, set_session_data
 
 load_dotenv()
 
@@ -137,6 +140,64 @@ def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str
     }
 
 
+def set_supers_audio_recommendation(
+    voice_message: str, start_at_milliseconds: int
+) -> dict[str, int]:
+    """
+    Generate audio voiceover that should be added to the video.
+
+    Args:
+        voice_message: The audio voice message
+        start_at_milliseconds: When the audio should start in milliseconds
+
+    Returns:
+        Dictionary with voice_message and start_at_milliseconds
+    """
+    recommendations = {
+        "voice_message": voice_message,
+        "start_at_milliseconds": start_at_milliseconds,
+    }
+    print("Setting recommendations in session data: ", recommendations)
+    set_session_data("current_recommendations", recommendations)
+    return recommendations
+
+
+def set_supers_text_recommendations(
+    text_message: str, start_at_milliseconds: int, end_at_milliseconds: int
+) -> dict[str, int]:
+    """
+    Set Supers (text) recommendations that should be added to the video.
+
+    Args:
+        text_message: The text to appear on screen
+        start_at_milliseconds: When the text should appear in milliseconds
+        end_at_milliseconds: When the text should disappear in milliseconds
+
+    Returns:
+        Dictionary with text_message, start_at_milliseconds, and end_at_milliseconds
+    """
+    recommendations = {
+        "text_message": text_message,
+        "start_at_milliseconds": start_at_milliseconds,
+        "end_at_milliseconds": end_at_milliseconds,
+    }
+    print("Setting recommendations in session data: ", recommendations)
+    set_session_data("current_recommendations", recommendations)
+    return recommendations
+
+
+def get_current_recommendations() -> dict[str, str]:
+    """
+    Get current recommendations from session data.
+
+    Returns:
+        Dictionary with current recommendations
+    """
+    recommendations = get_session_data("current_recommendations")
+    print("Getting current recommendations from session data: ", recommendations)
+    return recommendations
+
+
 def get_data(query: str):
     """"""
     logging.info("Extracting data... \n %s", query)
@@ -189,87 +250,98 @@ async def init_agent(
         f"Callback running before model call for agent: {callback_context.agent_name}"
     )
 
-    feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
-    feature_config = get_feature_config(feature_id)
-    if feature_config and feature_config.get("videoUrl"):
-        video_url = feature_config["videoUrl"]
-        print(f"Video URL: {video_url}")
+    if not callback_context.state.get("video_loaded_to_llm"):
+        feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
+        feature_config = get_feature_config(feature_id)
+        if feature_config and feature_config.get("videoUrl"):
+            video_url = feature_config["videoUrl"]
+            print(f"Video URL: {video_url}")
 
-        artifact_filename = "input_video.mp4"
+            artifact_filename = "input_video.mp4"
 
-        available_files = await callback_context.list_artifacts()
-        print(f"Available artifacts: {available_files}")
+            available_files = await callback_context.list_artifacts()
+            print(f"Available artifacts: {available_files}")
 
-        artifact_part = None
-        if artifact_filename in available_files:
-            print(f"Loading existing artifact: {artifact_filename}")
-            artifact_part = await callback_context.load_artifact(artifact_filename)
+            artifact_part = None
+            if artifact_filename in available_files:
+                print(f"Loading existing artifact: {artifact_filename}")
+                artifact_part = await callback_context.load_artifact(artifact_filename)
 
-        if artifact_part:
-            print(f"Artifact loaded successfully, extracting to temp file...")
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".mp4"
-            ) as tmp_file:
-                if artifact_part.inline_data and artifact_part.inline_data.data:
-                    tmp_file.write(artifact_part.inline_data.data)
-                    tmp_file.flush()
-                    callback_context.state["temp:video"] = tmp_file.name
-                    print(
-                        f"Extracted artifact to temp file: {tmp_file.name}"
-                    )
-                else:
-                    print("Artifact has no inline_data, will re-download")
-                    artifact_part = None
-
-        if not artifact_part:
-            print(f"No artifact found, downloading from {video_url}...")
-            try:
-                bucket_name = video_url.split("/")[2]
-                blob_path = unquote("/".join(video_url.split("/")[3:]))
-
-                storage_client = storage.Client()
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
+            if artifact_part:
+                print("Artifact loaded successfully, extracting to temp file...")
                 with tempfile.NamedTemporaryFile(
                     delete=False, suffix=".mp4"
                 ) as tmp_file:
-                    blob.download_to_filename(tmp_file.name)
+                    if artifact_part.inline_data and artifact_part.inline_data.data:
+                        tmp_file.write(artifact_part.inline_data.data)
+                        tmp_file.flush()
+                        callback_context.state["temp:video"] = tmp_file.name
+                        print(f"Extracted artifact to temp file: {tmp_file.name}")
 
-                    callback_context.state["video_url"] = video_url
-                    callback_context.state["temp:video"] = tmp_file.name
+                        if llm_request.contents and llm_request.contents[0].parts:
+                            llm_request.contents[0].parts.append(artifact_part)
+                            callback_context.state["video_loaded_to_llm"] = True
+                            print("Added video artifact to LLM request")
+                    else:
+                        print("Artifact has no inline_data, will re-download")
+                        artifact_part = None
 
-                    try:
-                        with open(tmp_file.name, "rb") as video_file:
-                            video_bytes = video_file.read()
+            if not artifact_part:
+                print(f"No artifact found, downloading from {video_url}...")
+                try:
+                    bucket_name = video_url.split("/")[2]
+                    blob_path = unquote("/".join(video_url.split("/")[3:]))
 
-                        video_artifact = types.Part.from_bytes(
-                            data=video_bytes, mime_type="video/mp4"
-                        )
+                    storage_client = storage.Client()
+                    bucket = storage_client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".mp4"
+                    ) as tmp_file:
+                        blob.download_to_filename(tmp_file.name)
 
-                        version = await callback_context.save_artifact(
-                            filename=artifact_filename, artifact=video_artifact
-                        )
-                        print(
-                            f"Successfully saved video artifact '{artifact_filename}' as version {version}."
-                        )
+                        callback_context.state["video_url"] = video_url
+                        callback_context.state["temp:video"] = tmp_file.name
 
-                    except ValueError as e:
-                        print(
-                            f"Error saving artifact: {e}. Is ArtifactService configured in Runner?"
-                        )
-                    except Exception as e:
-                        print(
-                            f"An unexpected error occurred during artifact save: {e}"
-                        )
+                        try:
+                            with open(tmp_file.name, "rb") as video_file:
+                                video_bytes = video_file.read()
 
-            except Exception as e:
-                print(f"Error downloading video: {e}")
+                            video_artifact = types.Part.from_bytes(
+                                data=video_bytes, mime_type="video/mp4"
+                            )
+
+                            version = await callback_context.save_artifact(
+                                filename=artifact_filename, artifact=video_artifact
+                            )
+                            print(
+                                f"Successfully saved video artifact '{artifact_filename}' as version {version}."
+                            )
+
+                            if llm_request.contents and llm_request.contents[0].parts:
+                                llm_request.contents[0].parts.append(video_artifact)
+                                callback_context.state["video_loaded_to_llm"] = True
+                                print("Added video artifact to LLM request")
+
+                        except ValueError as e:
+                            print(
+                                f"Error saving artifact: {e}. Is ArtifactService configured in Runner?"
+                            )
+                        except Exception as e:
+                            print(
+                                f"An unexpected error occurred during artifact save: {e}"
+                            )
+
+                except Exception as e:
+                    print(f"Error downloading video: {e}")
+    else:
+        print("Video already loaded to LLM request, skipping")
 
     return None
 
 
 def create_agent():
-    tools = [load_artifacts, add_text_to_video]
+    tools = [load_artifacts, add_text_to_video, generate_speech_from_text]
 
     name = "ai_editor_agent"
 
@@ -302,6 +374,9 @@ async def create_session():
 
 
 asyncio.run(create_session())
+
+# Initialize session data module
+initialize_session_data(APP_NAME, USER_ID, SESSION_ID, session_service)
 
 AGENT_RUNNER = Runner(
     agent=agent,

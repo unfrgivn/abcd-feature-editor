@@ -8,7 +8,7 @@
     "llmExplanation": "Feature not detected...",
     "isFixed": false,
     "videoId": "VID-AUTH-101",
-    "videoUrl": "https://www.youtube.com/watch?v=g_t-iI73k_c"
+    "videoUrl": "https://www.youtube.com/watch?v=j444CiUhIAs"
   },
   {
     "id": "a_supers_with_audio",
@@ -16,7 +16,7 @@
     "category": "Attract",
     "description": "The speech heard in the audio of the video matches OR is contextually supportive of the overlaid text shown on screen.",
     "detected": false,
-    "llmExplanation": "Feature not detected...",
+    "llmExplanation": "The video does not have any audio supers that describe the content of the video.",
     "isFixed": false,
     "videoId": "VID-CHAT-201",
     "videoUrl": "gs://bkt-plrs-prd-creative-audit-vizf/C39258910/videos/BDQs_Feeling%20Stuck_Primer_ET_UEI-329_9x16%20%281%29.mp4"

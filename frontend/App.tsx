@@ -1,38 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import ChatWindow from './components/ChatWindow';
 import FeaturesTable from './components/FeaturesTable';
 import { Feature } from './types';
 
-const initialFeatures: Feature[] = [
-  {
-    id: 'a_supers',
-    name: 'Supers',
-    category: 'Attract',
-    description: 'Any supers (text overlays) have been incorporated at any time in the video.',
-    detected: false,
-    llmExplanation: 'Feature not detected...',
-    isFixed: false,
-    videoId: 'VID-AUTH-101',
-    videoUrl: 'https://www.youtube.com/watch?v=g_t-iI73k_c'
-  },
-  {
-    id: 'a_supers_with_audio',
-    name: 'Supers with Audio',
-    category: 'Attract',
-    description: 'The speech heard in the audio of the video matches OR is contextually supportive of the overlaid text shown on screen.',
-    detected: false,
-    llmExplanation: 'Feature not detected...',
-    isFixed: false,
-    videoId: 'VID-CHAT-201',
-    videoUrl: 'gcs://bucket/videos/realtime-chat-demo.mp4'
-  }
-];
-
 
 function App() {
   const [view, setView] = useState<'table' | 'chat'>('table');
-  const [features, setFeatures] = useState<Feature[]>(initialFeatures);
+  const [features, setFeatures] = useState<Feature[]>([]);
   const [editingFeature, setEditingFeature] = useState<Feature | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const fetchFeatures = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('http://127.0.0.1:8000/api/config.json');
+        setFeatures(response.data);
+      } catch (error) {
+        console.error('Error fetching features:', error);
+        // Fallback to initial features if API fails
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFeatures();
+  }, []);
 
   const handleStartEdit = (feature: Feature) => {
     setEditingFeature(feature);
@@ -64,7 +58,14 @@ function App() {
         </div>
       </header>
       <main className="h-[calc(100vh-65px)]">
-        {view === 'table' ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400 mx-auto mb-4"></div>
+              <p className="text-lg text-gray-300">Loading features...</p>
+            </div>
+          </div>
+        ) : view === 'table' ? (
           <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             <FeaturesTable 
               features={features}

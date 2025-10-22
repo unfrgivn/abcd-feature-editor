@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Message as MessageType, Role, Feature } from '../types';
 import * as geminiService from '../services/geminiService';
 import axios from 'axios';
@@ -7,15 +7,18 @@ import ChatInput from './ChatInput';
 import { XIcon } from './icons/XIcon';
 
 interface ChatWindowProps {
-  featureToEdit?: Feature | null;
+  featureToEdit: Feature;
   onClose?: () => void;
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }) => {
+const INITIAL_MESSAGE = 'Please make initial recommendations for improving the video based on the feature description provided.';
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isInitialized = useRef<boolean>(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,25 +30,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }
 
   const initializeChat = useCallback(() => {
     try {
-      if (featureToEdit) {
-        geminiService.startChatSession(
-          'You are an assistant that helps edit software features. The user will describe changes, and you should help them refine the feature name and description.'
-        );
-        setMessages([
-          {
-            role: Role.MODEL,
-            text: `How would you like to update this feature?`,
-          },
-        ]);
-      } else {
-        geminiService.startChatSession();
-        setMessages([
-          {
-            role: Role.MODEL,
-            text: "Hello! I'm your Gemini AI assistant. How can I help you today?",
-          },
-        ]);
-      }
+      geminiService.startChatSession();
       setError(null);
     } catch (e) {
       if (e instanceof Error) {
@@ -60,6 +45,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }
 
   useEffect(() => {
     initializeChat();
+    if(!isInitialized.current){
+      isInitialized.current = true;
+      handleSendMessage(INITIAL_MESSAGE);
+    }
   }, [initializeChat]);
 
 
@@ -129,6 +118,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }
     );
   };
 
+  const filteredMessages = useMemo(
+    () => messages.filter(msg => msg.text !== INITIAL_MESSAGE), 
+    [messages]
+  );
+
   return (
     <div className="max-w-7xl mx-auto flex flex-col h-full">
       {featureToEdit && onClose && (
@@ -165,10 +159,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }
       )}
       
       <div className="flex-grow p-4 sm:p-6 space-y-6 overflow-y-auto">
-        {messages.map((msg, index) => (
+        {filteredMessages.map((msg, index) => (
           <Message key={index} message={msg} />
         ))}
-        {isLoading && messages[messages.length - 1]?.text === '' && (
+        {isLoading && filteredMessages[filteredMessages.length - 1]?.text === '' && (
           <div className="flex justify-start">
              <div className="flex items-center space-x-2">
                  <div className="bg-slate-700 p-3 rounded-lg flex items-center space-x-2">
