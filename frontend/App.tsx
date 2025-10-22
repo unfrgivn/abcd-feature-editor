@@ -13,7 +13,7 @@ const initialFeatures: Feature[] = [
     llmExplanation: 'Feature not detected...',
     isFixed: false,
     videoId: 'VID-AUTH-101',
-    videoUrl: 'https://www.youtube.com/watch?v=g_t-iI73k_c'
+    videoUrl: 'https://www.youtube.com/watch?v=j444CiUhIAs',
   },
   {
     id: 'a_supers_with_audio',
