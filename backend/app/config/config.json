@@ -8,7 +8,7 @@
     "llmExplanation": "Feature not detected...",
     "isFixed": false,
     "videoId": "VID-AUTH-101",
-    "videoUrl": "https://www.youtube.com/shorts/rnv2sghwJ8s"
+    "videoUrl": "https://www.youtube.com/watch?v=j444CiUhIAs"
   },
   {
     "id": "a_supers_with_audio",
@@ -16,9 +16,9 @@
     "category": "Attract",
     "description": "The speech heard in the audio of the video matches OR is contextually supportive of the overlaid text shown on screen.",
     "detected": false,
-    "llmExplanation": "The video contains several overlaid text elements (supers) such as 'Feeling stuck in my job but not sure what to do', 'Train to become an Electrician Technician at UEI', 'Graduate in as few as 10 months', 'Getting the hands-on training you need...', 'to fast track to a new career', and 'UEI Learn more today'. However, throughout the entire video, the audio consists solely of upbeat background music. There is no spoken dialogue or narration present in the video that could match or be contextually supportive of any of the displayed supers.",
+    "llmExplanation": "The video does not have any audio supers that describe the content of the video.",
     "isFixed": false,
     "videoId": "VID-CHAT-201",
-    "videoUrl": "https://www.youtube.com/watch?v=j444CiUhIAs"
+    "videoUrl": "https://www.youtube.com/watch?v=J---aiyznGQ"
   }
 ]
