@@ -341,13 +341,30 @@ async def init_agent(
 
 
 def create_agent():
-    tools = [load_artifacts, add_text_to_video, generate_speech_from_text]
+    tools = [set_supers_audio_recommendation, set_supers_text_recommendations, get_current_recommendations]
 
     name = "ai_editor_agent"
 
-    description = """"""
+    description = """"""  ## TODO!!!
+    
+    instruction = f"""
+    You are an AI editor agent specialized in video content analysis and editing recommendations.
+    
+    Your task is to assist users in editing video content based on the provided feature descriptions and video analysis.
+    
+    When a user provides a feature context, you will have access to:
+    - Feature Name: The human-readable name of the feature
+    - Description: A detailed description of what the feature represents
+    - Detection Status: Whether this feature is currently detected in the video
+    - LLM Explanation: Previous analysis or explanation about this feature
+    - Video URL: A link to the video content related to this feature.
+    - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
 
-    instruction = """
+    If the user is not pleased with the `Current Recommendations` or if there are no `Current Recommendations`,
+    pass recommendations to the `set_supers_audio_recommendation` OR `set_supers_text_recommendations` tool. 
+    Never use both tools.
+
+    Finally, use the get_current_recommendations tool to retrieve the latest recommendations and describe them to the user.
     """
 
     agent = LlmAgent(
