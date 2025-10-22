@@ -1,17 +1,27 @@
-import os
-import logging
 import asyncio
 import json
+import logging
+import os
+import tempfile
 from pathlib import Path
-from dateutil.relativedelta import relativedelta
-from google.adk.agents import LlmAgent
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from services.bigquery.bigquery_service import bigquery_service
+from typing import Optional
+from urllib.parse import unquote
+
 from dotenv import load_dotenv
 from google import genai
+from google.adk.agents import LlmAgent
+from google.adk.agents.callback_context import CallbackContext
+from google.adk.artifacts import InMemoryArtifactService
+from google.adk.models import LlmRequest, LlmResponse
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools import load_artifacts
+from google.cloud import storage
 from google.genai import types
 from .session_data import set_session_data, get_session_data, initialize_session_data
+
+from multi_tool_agent.add_text import add_text_to_video
+from services.bigquery.bigquery_service import bigquery_service
 
 load_dotenv()
 
@@ -19,11 +29,16 @@ APP_NAME = "wpromote-codesprint-2025"
 USER_ID = "user1"
 SESSION_ID = "session1"
 
+TEST_FEATURE_ID = "a_supers_with_audio"
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "config.json"
+
+UPLOADED_VIDEO_CACHE = {}
+
 
 def load_config():
     with open(CONFIG_PATH) as f:
         return json.load(f)
+
 
 def get_feature_config(feature_id: str):
     config = load_config()
@@ -199,41 +214,15 @@ async def call_agent_async(query):
             print("Agent Response: ", final_response)
 
 
+CURRENT_FEATURE_ID = None
+
+
 def call_agent(query, feature_id=None):
     """"""
-    parts = [types.Part(text=query)]
+    global CURRENT_FEATURE_ID
+    CURRENT_FEATURE_ID = feature_id or TEST_FEATURE_ID
 
-    current_recommendations = get_session_data("current_recommendations")
-    print("Current recommendations from session data: ", current_recommendations)
-    
-    if feature_id:
-        feature_config = get_feature_config(feature_id)
-        if feature_config:
-            parts.append(types.Part(text=f"""
-FEATURE CONTEXT:
-- Feature Name: {feature_config.get('name')}
-- Description: {feature_config.get('description')}
-- Currently Detected: {feature_config.get('detected')}
-- LLM Explanation: {feature_config.get('llmExplanation')}
-- Video URL: {feature_config.get('videoUrl')}
-- Current Recommendations: {current_recommendations}
-
-USER QUERY: {query}
-"""))
-            video_url = feature_config.get("videoUrl")
-            if video_url:
-                print(f"Adding video context from {video_url} for feature {feature_id}")
-                video_part = types.Part.from_uri(
-                    file_uri=video_url,
-                    mime_type="video/*",
-                )
-                parts.append(video_part)
-            else:
-                print(f"No videoUrl found for feature {feature_id}")
-        else:
-            print(f"Feature config not found for id: {feature_id}")
-    
-    content = types.Content(role="user", parts=parts)
+    content = types.Content(role="user", parts=[types.Part(text=query)])
     print("Running agent...")
     events = AGENT_RUNNER.run(
         user_id=USER_ID, session_id=SESSION_ID, new_message=content
@@ -247,31 +236,129 @@ USER QUERY: {query}
     return None
 
 
+async def init_agent(
+    callback_context: CallbackContext, llm_request: LlmRequest
+) -> Optional[LlmResponse]:
+    print(
+        f"Callback running before model call for agent: {callback_context.agent_name}"
+    )
+
+    feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
+    feature_config = get_feature_config(feature_id)
+    if feature_config and feature_config.get("videoUrl"):
+        video_url = feature_config["videoUrl"]
+        print(f"Video URL: {video_url}")
+        # print(f"Cache contents: {UPLOADED_VIDEO_CACHE}")
+
+        # artifact_name = video_url.split("/")[-1]
+
+        available_files = await callback_context.list_artifacts()
+        print(f"Available artifacts: {available_files}")
+
+        if len(available_files):
+            artifact_name = available_files[0]
+        # else:
+        #     artifact_name = video_url.split("/")[-1]
+        else:
+            artifact_name = "test"
+
+        artifact_part = await callback_context.load_artifact(artifact_name)
+        print(f"Loaded artifact part: {artifact_part}")
+        if not artifact_part:
+            print(
+                f"Could not load artifact or artifact has no text path: {artifact_name}"
+            )
+
+            # if video_url in UPLOADED_VIDEO_CACHE:
+            #     print(f"Using cached video URI: {UPLOADED_VIDEO_CACHE[video_url]}")
+            #     video_part = types.Part.from_uri(
+            #         file_uri=UPLOADED_VIDEO_CACHE[video_url],
+            #         mime_type="video/mp4",
+            #     )
+            #     llm_request.contents[0].parts.append(video_part)
+            # elif video_url.startswith("gs://"):
+            try:
+                print(f"Downloading and uploading video from {video_url} to Gemini...")
+                bucket_name = video_url.split("/")[2]
+                blob_path = unquote("/".join(video_url.split("/")[3:]))
+
+                storage_client = storage.Client()
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(blob_path)
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=".mp4"
+                ) as tmp_file:
+                    blob.download_to_filename(tmp_file.name)
+
+                    filename = tmp_file.name
+                    # video_artifact = types.Part.from_uri(
+                    #     filename=filename, mime_type="video/*"
+                    # )
+                    # filename = "generated_report.pdf"
+
+                    try:
+                        version = await callback_context.save_artifact(
+                            filename=filename, artifact=artifact_name
+                        )
+                        print(
+                            f"Successfully saved Python artifact '{filename}' as version {version}."
+                        )
+                        callback_context.state["temp:video"] = filename
+
+                        # The event generated after this callback will contain:
+                        # event.actions.artifact_delta == {"generated_report.pdf": version}
+                    except ValueError as e:
+                        print(
+                            f"Error saving Python artifact: {e}. Is ArtifactService configured in Runner?"
+                        )
+                    except Exception as e:
+                        # Handle potential storage errors (e.g., GCS permissions)
+                        print(
+                            f"An unexpected error occurred during Python artifact save: {e}"
+                        )
+
+                    # client = genai.Client(
+                    #     vertexai=False,
+                    #     api_key=os.environ.get("GOOGLE_API_KEY"),
+                    # )
+
+                    # uploaded_file = client.files.upload(file=tmp_file.name)
+                    # print(f"Video uploaded to Gemini: {uploaded_file.uri}")
+
+                    # print(
+                    #     f"Waiting for video to become ACTIVE (state: {uploaded_file.state})..."
+                    # )
+                    # while uploaded_file.state != "ACTIVE":
+                    #     time.sleep(2)
+                    #     uploaded_file = client.files.get(name=uploaded_file.name)
+                    #     print(f"Video state: {uploaded_file.state}")
+
+                    # print("Video is now ACTIVE")
+
+                    # UPLOADED_VIDEO_CACHE[video_url] = uploaded_file.uri
+
+                    # video_part = types.Part.from_uri(
+                    #     file_uri=uploaded_file.uri,
+                    #     mime_type="video/mp4",
+                    # )
+                    # llm_request.contents[0].parts.append(video_part)
+
+                os.unlink(tmp_file.name)
+
+            except Exception as e:
+                print(f"Error uploading video: {e}")
+
+    return None
+
+
 def create_agent():
-    tools = [set_supers_audio_recommendation, set_supers_text_recommendations, get_current_recommendations]
+    tools = [load_artifacts, add_text_to_video]
 
     name = "ai_editor_agent"
 
-    description = """"""  ## TODO!!!
-    
-    instruction = f"""
-    You are an AI editor agent specialized in video content analysis and editing recommendations.
-    
-    Your task is to assist users in editing video content based on the provided feature descriptions and video analysis.
-    
-    When a user provides a feature context, you will have access to:
-    - Feature Name: The human-readable name of the feature
-    - Description: A detailed description of what the feature represents
-    - Detection Status: Whether this feature is currently detected in the video
-    - LLM Explanation: Previous analysis or explanation about this feature
-    - Video URL: A link to the video content related to this feature.
-    - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
+    description = """"""
 
-    If the user is not pleased with the `Current Recommendations` or if there are no `Current Recommendations`,
-    pass recommendations to the `set_supers_audio_recommendation` OR `set_supers_text_recommendations` tool. 
-    Never use both tools.
-
-    Finally, use the get_current_recommendations tool to retrieve the latest recommendations and describe them to the user.
+    instruction = """
     """
 
     agent = LlmAgent(
@@ -280,14 +367,15 @@ def create_agent():
         description=description,
         instruction=instruction,
         tools=tools,
+        before_model_callback=init_agent,
     )
 
     return agent
 
 
-# Init agent
 agent = create_agent()
 session_service = InMemorySessionService()
+artifact_service = InMemoryArtifactService()
 
 
 async def create_session():
@@ -305,4 +393,5 @@ AGENT_RUNNER = Runner(
     agent=agent,
     app_name=APP_NAME,
     session_service=session_service,
+    artifact_service=artifact_service,
 )
