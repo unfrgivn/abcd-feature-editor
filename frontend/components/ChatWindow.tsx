@@ -7,11 +7,11 @@ import ChatInput from './ChatInput';
 import { XIcon } from './icons/XIcon';
 
 interface ChatWindowProps {
-  featureToEdit?: Feature | null;
+  featureToEdit: Feature;
   onClose?: () => void;
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,25 +27,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }
 
   const initializeChat = useCallback(() => {
     try {
-      if (featureToEdit) {
-        geminiService.startChatSession(
-          'You are an assistant that helps edit software features. The user will describe changes, and you should help them refine the feature name and description.'
-        );
-        setMessages([
-          {
-            role: Role.MODEL,
-            text: `How would you like to update this feature?`,
-          },
-        ]);
-      } else {
-        geminiService.startChatSession();
-        setMessages([
-          {
-            role: Role.MODEL,
-            text: "Hello! I'm your Gemini AI assistant. How can I help you today?",
-          },
-        ]);
-      }
+      geminiService.startChatSession();
       setError(null);
     } catch (e) {
       if (e instanceof Error) {
