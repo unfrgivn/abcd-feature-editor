@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Message as MessageType, Role, Feature } from '../types';
 import * as geminiService from '../services/geminiService';
 import axios from 'axios';
@@ -10,6 +10,8 @@ interface ChatWindowProps {
   featureToEdit: Feature;
   onClose?: () => void;
 }
+
+const INITIAL_MESSAGE = 'Please make initial recommendations for improving the video based on the feature description provided.';
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
   const [messages, setMessages] = useState<MessageType[]>([]);
@@ -45,7 +47,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
     initializeChat();
     if(!isInitialized.current){
       isInitialized.current = true;
-      handleSendMessage('Please make initial recommendations for improving the video based on the feature description provided.');
+      handleSendMessage(INITIAL_MESSAGE);
     }
   }, [initializeChat]);
 
@@ -116,6 +118,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
     );
   };
 
+  const filteredMessages = useMemo(
+    () => messages.filter(msg => msg.text !== INITIAL_MESSAGE), 
+    [messages]
+  );
+
   return (
     <div className="max-w-7xl mx-auto flex flex-col h-full">
       {featureToEdit && onClose && (
@@ -152,10 +159,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
       )}
       
       <div className="flex-grow p-4 sm:p-6 space-y-6 overflow-y-auto">
-        {messages.map((msg, index) => (
+        {filteredMessages.map((msg, index) => (
           <Message key={index} message={msg} />
         ))}
-        {isLoading && messages[messages.length - 1]?.text === '' && (
+        {isLoading && filteredMessages[filteredMessages.length - 1]?.text === '' && (
           <div className="flex justify-start">
              <div className="flex items-center space-x-2">
                  <div className="bg-slate-700 p-3 rounded-lg flex items-center space-x-2">
