@@ -143,7 +143,15 @@ def set_supers_audio_recommendation(voice_message: str, start_at_milliseconds: i
     return recommendations
 
 
-def set_supers_text_recommendations(text_message: str, start_at_milliseconds: int, end_at_milliseconds: int) -> dict[str, int]:
+def set_supers_text_recommendations(
+        text_message: str, 
+        start_at_milliseconds: int, 
+        end_at_milliseconds: int,
+        text_position: str,
+        font_size: str,
+        font_color: str,
+        background_color: str = "transparent"
+    ) -> dict[str, int]:
     """
     Set Supers (text) recommendations that should be added to the video.
     
@@ -151,7 +159,10 @@ def set_supers_text_recommendations(text_message: str, start_at_milliseconds: in
         text_message: The text to appear on screen
         start_at_milliseconds: When the text should appear in milliseconds
         end_at_milliseconds: When the text should disappear in milliseconds
-        
+        text_position: Position of the text on screen (e.g., "top-left", "bottom-right")
+        font_size: Size of the text font (e.g., "small", "medium", "large")
+        font_color: Color of the text font (e.g., "white", "black", "red")
+        background_color: Background color of the text (e.g., "transparent", "black", "red")
     Returns:
         Dictionary with text_message, start_at_milliseconds, and end_at_milliseconds
     """
@@ -159,6 +170,10 @@ def set_supers_text_recommendations(text_message: str, start_at_milliseconds: in
         "text_message": text_message,
         "start_at_milliseconds": start_at_milliseconds,
         "end_at_milliseconds": end_at_milliseconds,
+        "position": text_position,
+        "font_size": font_size,
+        "font_color": font_color,
+        "background_color": background_color,
     }
     print("Setting recommendations in session data: ", recommendations)
     set_session_data("current_recommendations", recommendations)
@@ -271,7 +286,8 @@ def create_agent():
     pass recommendations to the `set_supers_audio_recommendation` OR `set_supers_text_recommendations` tool. 
     Never use both tools.
 
-    Finally, use the get_current_recommendations tool to retrieve the latest recommendations and describe them to the user.
+    Finally, use the get_current_recommendations tool to retrieve the latest recommendations
+    and describe each change attribute in the response of the tool IN FULL to the user.
     """
 
     agent = LlmAgent(
