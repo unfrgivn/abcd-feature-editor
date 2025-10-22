@@ -229,7 +229,39 @@ def call_agent(query, feature_id=None):
     global CURRENT_FEATURE_ID
     CURRENT_FEATURE_ID = feature_id or TEST_FEATURE_ID
 
-    content = types.Content(role="user", parts=[types.Part(text=query)])
+    parts = [types.Part(text=query)]
+
+    current_recommendations = get_session_data("current_recommendations")
+    print("Current recommendations from session data: ", current_recommendations)
+    
+    if feature_id:
+        feature_config = get_feature_config(feature_id)
+        if feature_config:
+            parts.append(types.Part(text=f"""
+FEATURE CONTEXT:
+- Feature Name: {feature_config.get('name')}
+- Description: {feature_config.get('description')}
+- Currently Detected: {feature_config.get('detected')}
+- LLM Explanation: {feature_config.get('llmExplanation')}
+- Video URL: {feature_config.get('videoUrl')}
+- Current Recommendations: {current_recommendations}
+
+USER QUERY: {query}
+"""))
+            video_url = feature_config.get("videoUrl")
+            if video_url:
+                print(f"Adding video context from {video_url} for feature {feature_id}")
+                video_part = types.Part.from_uri(
+                    file_uri=video_url,
+                    mime_type="video/*",
+                )
+                parts.append(video_part)
+            else:
+                print(f"No videoUrl found for feature {feature_id}")
+        else:
+            print(f"Feature config not found for id: {feature_id}")
+    
+    content = types.Content(role="user", parts=parts)
     print("Running agent...")
     events = AGENT_RUNNER.run(
         user_id=USER_ID, session_id=SESSION_ID, new_message=content
