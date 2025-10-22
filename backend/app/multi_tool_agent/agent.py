@@ -11,6 +11,7 @@ from services.bigquery.bigquery_service import bigquery_service
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from .session_data import set_session_data, get_session_data, initialize_session_data
 
 load_dotenv()
 
@@ -122,10 +123,24 @@ def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str
     }
 
 
-def generate_recommendations(feature_id: str) -> str:
-    """Generate recommendations for a specific feature"""
-    print("Generating recommendations for feature_id: %s", feature_id)
-    return "Tell them to mute the video."
+def generate_recommendations(voice_message: str, start_at_milliseconds: int) -> dict[str, int]:
+    """
+    Generate voice message and timing from input data using LLM.
+    
+    Args:
+        voice_message: The original voice message
+        start_at_milliseconds: The original start time in milliseconds
+        
+    Returns:
+        Dictionary with voice_message and start_at_milliseconds
+    """
+    recommendations = {
+        "voice_message": voice_message,
+        "start_at_milliseconds": start_at_milliseconds,
+    }
+    print("Setting recommendations in session data: ", recommendations)
+    set_session_data("current_recommendations", recommendations)
+    return recommendations
 
 
 def get_data(query: str):
@@ -154,6 +169,9 @@ async def call_agent_async(query):
 def call_agent(query, feature_id=None):
     """"""
     parts = [types.Part(text=query)]
+
+    current_recommendations = get_session_data("current_recommendations")
+    print("Current recommendations from session data: ", current_recommendations)
     
     if feature_id:
         feature_config = get_feature_config(feature_id)
@@ -165,6 +183,7 @@ FEATURE CONTEXT:
 - Currently Detected: {feature_config.get('detected')}
 - LLM Explanation: {feature_config.get('llmExplanation')}
 - Video URL: {feature_config.get('videoUrl')}
+- Current Recommendations: {current_recommendations}
 
 USER QUERY: {query}
 """))
@@ -213,8 +232,12 @@ def create_agent():
     - Detection Status: Whether this feature is currently detected in the video
     - LLM Explanation: Previous analysis or explanation about this feature
     - Video URL: A link to the video content related to this feature.
-    
-    You should reference this feature context in your responses and provide specific recommendations based on the feature being discussed.
+    - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
+
+    If the user is not pleased with the `Current Recommendations` or if there are no `Current Recommendations`,
+    pass recommendations to the `generate_recommendations` tool.
+
+    Then, use the output of the `generate_recommendations` tool to describe them in detail to the user.
     """
 
     agent = LlmAgent(
@@ -240,6 +263,9 @@ async def create_session():
 
 
 asyncio.run(create_session())
+
+# Initialize session data module
+initialize_session_data(APP_NAME, USER_ID, SESSION_ID, session_service)
 
 AGENT_RUNNER = Runner(
     agent=agent,
