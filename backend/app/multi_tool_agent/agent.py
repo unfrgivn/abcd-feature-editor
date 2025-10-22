@@ -248,37 +248,36 @@ async def init_agent(
     if feature_config and feature_config.get("videoUrl"):
         video_url = feature_config["videoUrl"]
         print(f"Video URL: {video_url}")
-        # print(f"Cache contents: {UPLOADED_VIDEO_CACHE}")
 
-        # artifact_name = video_url.split("/")[-1]
+        artifact_filename = "input_video.mp4"
 
         available_files = await callback_context.list_artifacts()
         print(f"Available artifacts: {available_files}")
 
-        if len(available_files):
-            artifact_name = available_files[0]
-        # else:
-        #     artifact_name = video_url.split("/")[-1]
-        else:
-            artifact_name = "test"
+        artifact_part = None
+        if artifact_filename in available_files:
+            print(f"Loading existing artifact: {artifact_filename}")
+            artifact_part = await callback_context.load_artifact(artifact_filename)
 
-        artifact_part = await callback_context.load_artifact(artifact_name)
-        print(f"Loaded artifact part: {artifact_part}")
+        if artifact_part:
+            print(f"Artifact loaded successfully, extracting to temp file...")
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=".mp4"
+            ) as tmp_file:
+                if artifact_part.inline_data and artifact_part.inline_data.data:
+                    tmp_file.write(artifact_part.inline_data.data)
+                    tmp_file.flush()
+                    callback_context.state["temp:video"] = tmp_file.name
+                    print(
+                        f"Extracted artifact to temp file: {tmp_file.name}"
+                    )
+                else:
+                    print("Artifact has no inline_data, will re-download")
+                    artifact_part = None
+
         if not artifact_part:
-            print(
-                f"Could not load artifact or artifact has no text path: {artifact_name}"
-            )
-
-            # if video_url in UPLOADED_VIDEO_CACHE:
-            #     print(f"Using cached video URI: {UPLOADED_VIDEO_CACHE[video_url]}")
-            #     video_part = types.Part.from_uri(
-            #         file_uri=UPLOADED_VIDEO_CACHE[video_url],
-            #         mime_type="video/mp4",
-            #     )
-            #     llm_request.contents[0].parts.append(video_part)
-            # elif video_url.startswith("gs://"):
+            print(f"No artifact found, downloading from {video_url}...")
             try:
-                print(f"Downloading and uploading video from {video_url} to Gemini...")
                 bucket_name = video_url.split("/")[2]
                 blob_path = unquote("/".join(video_url.split("/")[3:]))
 
@@ -290,63 +289,35 @@ async def init_agent(
                 ) as tmp_file:
                     blob.download_to_filename(tmp_file.name)
 
-                    filename = tmp_file.name
-                    # video_artifact = types.Part.from_uri(
-                    #     filename=filename, mime_type="video/*"
-                    # )
-                    # filename = "generated_report.pdf"
+                    callback_context.state["video_url"] = video_url
+                    callback_context.state["temp:video"] = tmp_file.name
 
                     try:
+                        with open(tmp_file.name, "rb") as video_file:
+                            video_bytes = video_file.read()
+
+                        video_artifact = types.Part.from_bytes(
+                            data=video_bytes, mime_type="video/mp4"
+                        )
+
                         version = await callback_context.save_artifact(
-                            filename=filename, artifact=artifact_name
+                            filename=artifact_filename, artifact=video_artifact
                         )
                         print(
-                            f"Successfully saved Python artifact '{filename}' as version {version}."
+                            f"Successfully saved video artifact '{artifact_filename}' as version {version}."
                         )
-                        callback_context.state["temp:video"] = filename
 
-                        # The event generated after this callback will contain:
-                        # event.actions.artifact_delta == {"generated_report.pdf": version}
                     except ValueError as e:
                         print(
-                            f"Error saving Python artifact: {e}. Is ArtifactService configured in Runner?"
+                            f"Error saving artifact: {e}. Is ArtifactService configured in Runner?"
                         )
                     except Exception as e:
-                        # Handle potential storage errors (e.g., GCS permissions)
                         print(
-                            f"An unexpected error occurred during Python artifact save: {e}"
+                            f"An unexpected error occurred during artifact save: {e}"
                         )
 
-                    # client = genai.Client(
-                    #     vertexai=False,
-                    #     api_key=os.environ.get("GOOGLE_API_KEY"),
-                    # )
-
-                    # uploaded_file = client.files.upload(file=tmp_file.name)
-                    # print(f"Video uploaded to Gemini: {uploaded_file.uri}")
-
-                    # print(
-                    #     f"Waiting for video to become ACTIVE (state: {uploaded_file.state})..."
-                    # )
-                    # while uploaded_file.state != "ACTIVE":
-                    #     time.sleep(2)
-                    #     uploaded_file = client.files.get(name=uploaded_file.name)
-                    #     print(f"Video state: {uploaded_file.state}")
-
-                    # print("Video is now ACTIVE")
-
-                    # UPLOADED_VIDEO_CACHE[video_url] = uploaded_file.uri
-
-                    # video_part = types.Part.from_uri(
-                    #     file_uri=uploaded_file.uri,
-                    #     mime_type="video/mp4",
-                    # )
-                    # llm_request.contents[0].parts.append(video_part)
-
-                os.unlink(tmp_file.name)
-
             except Exception as e:
-                print(f"Error uploading video: {e}")
+                print(f"Error downloading video: {e}")
 
     return None
 
