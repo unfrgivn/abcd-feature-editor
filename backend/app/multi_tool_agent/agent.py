@@ -1,6 +1,8 @@
 import os
 import logging
 import asyncio
+import json
+from pathlib import Path
 from dateutil.relativedelta import relativedelta
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
@@ -9,14 +11,25 @@ from services.bigquery.bigquery_service import bigquery_service
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-import os
 
-# Load environment variables from .env file
 load_dotenv()
 
 APP_NAME = "wpromote-codesprint-2025"
 USER_ID = "user1"
 SESSION_ID = "session1"
+
+CONFIG_PATH = Path(__file__).parent.parent / "config" / "config.json"
+
+def load_config():
+    with open(CONFIG_PATH) as f:
+        return json.load(f)
+
+def get_feature_config(feature_id: str):
+    config = load_config()
+    for feature in config:
+        if feature.get("id") == feature_id:
+            return feature
+    return None
 
 
 def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str]:
@@ -132,14 +145,31 @@ async def call_agent_async(query):
             print("Agent Response: ", final_response)
 
 
-def call_agent(query):
+def call_agent(query, feature_id=None):
     """"""
-    content = types.Content(role="user", parts=[types.Part(text=query)])
+    parts = [types.Part(text=query)]
+    
+    if feature_id:
+        feature_config = get_feature_config(feature_id)
+        if feature_config:
+            video_url = feature_config.get("videoUrl")
+            if video_url:
+                print(f"Adding video context from {video_url} for feature {feature_id}")
+                video_part = types.Part.from_uri(
+                    file_uri=video_url,
+                    mime_type="video/*",
+                )
+                parts.append(video_part)
+            else:
+                print(f"No videoUrl found for feature {feature_id}")
+        else:
+            print(f"Feature config not found for id: {feature_id}")
+    
+    content = types.Content(role="user", parts=parts)
     print("Running agent...")
     events = AGENT_RUNNER.run(
         user_id=USER_ID, session_id=SESSION_ID, new_message=content
     )
-    # Iterate on agent responses
     print("Processing agent responses...")
     for event in events:
         if event.is_final_response() and event.content:

@@ -16,14 +16,14 @@ def healthcheck():
 
 
 @router.post("/call_ai_editor_agent")
-async def call_ai_editor_agent(userQuery: UserQuery) -> Response:
+async def call_ai_editor_agent(userQuery: UserQuery):
     """Call AI Editor agent to edit videos"""
     try:
 
         print("Calling agent...")
-        response = agent.call_agent(userQuery.query)
+        response = agent.call_agent(userQuery.query, userQuery.feature_id)
 
-        return response
+        return Response(content=response or "", status_code=200)
     except Exception as ex:
         logging.error("AI Editor Agent - ERROR:  %s", str(ex))
 

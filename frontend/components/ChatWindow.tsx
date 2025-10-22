@@ -73,6 +73,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit = null, onClose }
     try {
       const { data } = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
         query: inputText,
+        feature_id: featureToEdit?.id,
       });
       const botMessage: MessageType = { role: Role.MODEL, text: data };
       setMessages((prev) => [...prev, botMessage]);
