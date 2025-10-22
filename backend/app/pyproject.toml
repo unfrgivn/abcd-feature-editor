@@ -14,5 +14,6 @@ dependencies = [
   "pandas",
   "python-dotenv",
   "db-dtypes",
-  "google-adk"
+  "google-adk",
+  "moviepy>=2.2.1",
 ]

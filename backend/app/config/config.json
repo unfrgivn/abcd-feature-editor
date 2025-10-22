@@ -19,6 +19,6 @@
     "llmExplanation": "Feature not detected...",
     "isFixed": false,
     "videoId": "VID-CHAT-201",
-    "videoUrl": "https://storage.googleapis.com/bkt-plrs-prd-creative-audit-vizf/C39258910/videos/BDQs_Feeling%20Stuck_Primer_ET_UEI-329_9x16%20%281%29.mp4"
+    "videoUrl": "gs://bkt-plrs-prd-creative-audit-vizf/C39258910/videos/BDQs_Feeling%20Stuck_Primer_ET_UEI-329_9x16%20%281%29.mp4"
   }
 ]
