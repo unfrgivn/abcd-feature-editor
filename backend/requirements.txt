@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+google-cloud-aiplatform
+google-cloud
+google-cloud-logging
+pydantic_settings
+pandas
+python-dotenv
+db-dtypes
+google-adk

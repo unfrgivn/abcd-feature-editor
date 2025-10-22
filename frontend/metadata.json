@@ -1,0 +1,5 @@
+{
+  "name": "Gemini AI Chat Agent",
+  "description": "A sleek and responsive chatbot application powered by the Google Gemini API. Engage in natural conversations with an advanced AI agent, built with React and Tailwind CSS.",
+  "requestFramePermissions": []
+}

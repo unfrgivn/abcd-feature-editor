@@ -1,0 +1,18 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "google-cloud-aiplatform",
+  "google-cloud",
+  "google-cloud-logging",
+  "pydantic_settings",
+  "pandas",
+  "python-dotenv",
+  "db-dtypes",
+  "google-adk"
+]
