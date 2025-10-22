@@ -18,10 +18,12 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools import load_artifacts
 from google.cloud import storage
 from google.genai import types
-from .session_data import set_session_data, get_session_data, initialize_session_data
 
 from multi_tool_agent.add_text import add_text_to_video
+from multi_tool_agent.generate_speech_tool import generate_speech_from_text
 from services.bigquery.bigquery_service import bigquery_service
+
+from .session_data import get_session_data, initialize_session_data, set_session_data
 
 load_dotenv()
 
@@ -138,14 +140,16 @@ def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str
     }
 
 
-def set_supers_audio_recommendation(voice_message: str, start_at_milliseconds: int) -> dict[str, int]:
+def set_supers_audio_recommendation(
+    voice_message: str, start_at_milliseconds: int
+) -> dict[str, int]:
     """
     Generate audio voiceover that should be added to the video.
-    
+
     Args:
         voice_message: The audio voice message
         start_at_milliseconds: When the audio should start in milliseconds
-        
+
     Returns:
         Dictionary with voice_message and start_at_milliseconds
     """
@@ -158,15 +162,17 @@ def set_supers_audio_recommendation(voice_message: str, start_at_milliseconds: i
     return recommendations
 
 
-def set_supers_text_recommendations(text_message: str, start_at_milliseconds: int, end_at_milliseconds: int) -> dict[str, int]:
+def set_supers_text_recommendations(
+    text_message: str, start_at_milliseconds: int, end_at_milliseconds: int
+) -> dict[str, int]:
     """
     Set Supers (text) recommendations that should be added to the video.
-    
+
     Args:
         text_message: The text to appear on screen
         start_at_milliseconds: When the text should appear in milliseconds
         end_at_milliseconds: When the text should disappear in milliseconds
-        
+
     Returns:
         Dictionary with text_message, start_at_milliseconds, and end_at_milliseconds
     """
@@ -183,13 +189,14 @@ def set_supers_text_recommendations(text_message: str, start_at_milliseconds: in
 def get_current_recommendations() -> dict[str, str]:
     """
     Get current recommendations from session data.
-    
+
     Returns:
         Dictionary with current recommendations
     """
     recommendations = get_session_data("current_recommendations")
     print("Getting current recommendations from session data: ", recommendations)
     return recommendations
+
 
 def get_data(query: str):
     """"""
@@ -261,7 +268,7 @@ async def init_agent(
                 artifact_part = await callback_context.load_artifact(artifact_filename)
 
             if artifact_part:
-                print(f"Artifact loaded successfully, extracting to temp file...")
+                print("Artifact loaded successfully, extracting to temp file...")
                 with tempfile.NamedTemporaryFile(
                     delete=False, suffix=".mp4"
                 ) as tmp_file:
@@ -269,10 +276,8 @@ async def init_agent(
                         tmp_file.write(artifact_part.inline_data.data)
                         tmp_file.flush()
                         callback_context.state["temp:video"] = tmp_file.name
-                        print(
-                            f"Extracted artifact to temp file: {tmp_file.name}"
-                        )
-                        
+                        print(f"Extracted artifact to temp file: {tmp_file.name}")
+
                         if llm_request.contents and llm_request.contents[0].parts:
                             llm_request.contents[0].parts.append(artifact_part)
                             callback_context.state["video_loaded_to_llm"] = True
@@ -312,7 +317,7 @@ async def init_agent(
                             print(
                                 f"Successfully saved video artifact '{artifact_filename}' as version {version}."
                             )
-                            
+
                             if llm_request.contents and llm_request.contents[0].parts:
                                 llm_request.contents[0].parts.append(video_artifact)
                                 callback_context.state["video_loaded_to_llm"] = True
@@ -336,7 +341,7 @@ async def init_agent(
 
 
 def create_agent():
-    tools = [load_artifacts, add_text_to_video]
+    tools = [load_artifacts, add_text_to_video, generate_speech_from_text]
 
     name = "ai_editor_agent"
 

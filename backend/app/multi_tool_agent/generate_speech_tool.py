@@ -1,7 +1,9 @@
-import os
 import datetime
-from google.cloud import texttospeech
+import os
+
 from google.adk.tools import ToolContext
+from google.cloud import texttospeech
+
 
 def generate_speech_from_text(
     tool_context: ToolContext,
