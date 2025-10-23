@@ -53,6 +53,9 @@ async def add_text_to_video(
         print("Found artifact:", artifact_name)
 
     input_video_path = await tool_context.load_artifact(artifact_name)
+    
+    if not output_video_path or output_video_path.strip() == "":
+        output_video_path = tempfile.mktemp(suffix=".mp4")
 
     bucket_name = video_url.split("/")[2]
     blob_path = unquote("/".join(video_url.split("/")[3:]))
@@ -109,7 +112,9 @@ async def add_text_to_video(
 
             result = CompositeVideoClip([video_clip, txt_clip])
 
-            os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
+            output_dir = os.path.dirname(output_video_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
 
             result.write_videofile(
                 output_video_path,
