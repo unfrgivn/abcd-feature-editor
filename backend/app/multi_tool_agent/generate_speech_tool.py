@@ -7,7 +7,6 @@ from urllib.parse import unquote
 from core.config import settings
 from google.adk.tools import ToolContext
 from google.cloud import storage, texttospeech
-from moviepy import AudioFileClip, VideoFileClip
 
 logger = logging.getLogger(__name__)
 
@@ -110,96 +109,101 @@ def generate_speech_from_text(
         return {"status": "ERROR", "response": str(ex)}
 
 
-def add_audio_to_video(tool_context: ToolContext):
-    """Adds audio to a video using paths from the tool context.
+# def add_audio_to_video(tool_context: ToolContext):
+#     """Adds audio to a video using paths from the tool context.
 
-    Downloads the video from GCS (via `video_url`), replaces its
-    audio with the local file (`generated_audio_output_path`), and
-    saves the result locally and uploads to GCS.
+#     Downloads the video from GCS (via `video_url`), replaces its
+#     audio with the local file (`generated_audio_output_path`), and
+#     saves the result locally and uploads to GCS.
 
-    Args:
-        tool_context (ToolContext): Contains state with:
-            - `generated_audio_output_path` (str): Local path to the audio file.
-            - `video_url` (str): GCS URL for the video file.
+#     Args:
+#         tool_context (ToolContext): Contains state with:
+#             - `generated_audio_output_path` (str): Local path to the audio file.
+#             - `video_url` (str): GCS URL for the video file.
 
-    Returns:
-        dict: A dictionary with 'status', 'response', and 'video_url' keys.
-    """
-    try:
-        from multi_tool_agent.session_data import set_session_data
+#     Returns:
+#         dict: A dictionary with 'status', 'response', and 'video_url' keys.
+#     """
+#     try:
+#         from multi_tool_agent.session_data import set_session_data
         
-        generated_audio_output_path = tool_context.state.get(
-            "generated_audio_output_path"
-        )
-        logger.info(
-            f"This is generated_audio_output_path: {generated_audio_output_path} \n"
-        )
-        video_url = tool_context.state.get("video_url")
-        logger.info(f"This is video_url: {video_url} \n")
+#         generated_audio_output_path = tool_context.state.get(
+#             "generated_audio_output_path"
+#         )
+#         logger.info(
+#             f"This is generated_audio_output_path: {generated_audio_output_path} \n"
+#         )
+#         video_url = tool_context.state.get("video_url")
+#         logger.info(f"This is video_url: {video_url} \n")
 
-        bucket_name = video_url.split("/")[2]
-        blob_path = unquote("/".join(video_url.split("/")[3:]))
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
-        download_to_path = f"video_edits/videos/{blob.name}"
+#         bucket_name = video_url.split("/")[2]
+#         blob_path = unquote("/".join(video_url.split("/")[3:]))
+#         storage_client = storage.Client()
+#         bucket = storage_client.bucket(bucket_name)
+#         blob = bucket.blob(blob_path)
+#         download_to_path = f"video_edits/videos/{blob.name}"
         
-        os.makedirs(os.path.dirname(download_to_path), exist_ok=True)
-        blob.download_to_filename(download_to_path)
+#         os.makedirs(os.path.dirname(download_to_path), exist_ok=True)
+#         blob.download_to_filename(download_to_path)
 
-        video_clip = VideoFileClip(download_to_path)
+#         video_clip = VideoFileClip(download_to_path)
 
-        audio_clip = AudioFileClip(generated_audio_output_path)
+#         audio_clip = AudioFileClip(generated_audio_output_path)
 
-        logger.info(f"Video duration: {video_clip.duration} seconds")
-        logger.info(f"Audio duration: {audio_clip.duration} seconds")
+#         logger.info(f"Video duration: {video_clip.duration} seconds")
+#         logger.info(f"Audio duration: {audio_clip.duration} seconds")
 
-        logger.info("Setting new audio for the video...")
-        if audio_clip.duration > video_clip.duration:
-            video_clip.audio = audio_clip.subclipped(0, video_clip.duration)
-        else:
-            video_clip.audio = audio_clip
+#         logger.info("Setting new audio for the video...")
+#         if audio_clip.duration > video_clip.duration:
+#             video_clip.audio = audio_clip.subclipped(0, video_clip.duration)
+#         else:
+#             video_clip.audio = audio_clip
 
-        edited_video_name = (
-            f"edited_{datetime.datetime.now().timestamp()}.mp4"
-        )
-        edited_video_path = f"video_edits/videos/{edited_video_name}"
+#         edited_video_name = (
+#             f"edited_{datetime.datetime.now().timestamp()}.mp4"
+#         )
+#         edited_video_path = f"video_edits/videos/{edited_video_name}"
 
-        video_clip.write_videofile(
-            edited_video_path,
-            codec="libx264",
-            audio_codec="aac",
-            temp_audiofile="temp-audio.m4a",
-            remove_temp=True,
-        )
+#         video_clip.write_videofile(
+#             edited_video_path,
+#             codec="libx264",
+#             audio_codec="aac",
+#             temp_audiofile="temp-audio.m4a",
+#             remove_temp=True,
+#         )
 
-        gcs_bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
-        gcs_blob_path = f"videos/{edited_video_name}"
-        gcs_blob = gcs_bucket.blob(gcs_blob_path)
+#         gcs_bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
+#         gcs_blob_path = f"videos/{edited_video_name}"
+#         gcs_blob = gcs_bucket.blob(gcs_blob_path)
         
-        gcs_blob.upload_from_filename(edited_video_path)
-        gcs_blob.reload()
+#         gcs_blob.upload_from_filename(edited_video_path)
+#         gcs_blob.reload()
         
-        edited_video_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
-        logger.info(f"Edited video uploaded to GCS: {edited_video_url}")
+#         edited_video_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
+#         logger.info(f"Edited video uploaded to GCS: {edited_video_url}")
 
-        tool_context.state["edited_video_url"] = edited_video_url
-        set_session_data("latest_video_url", edited_video_url)
+#         tool_context.state["edited_video_url"] = edited_video_url
+#         set_session_data("latest_video_url", edited_video_url)
 
-        return {
-            "status": "success",
-            "response": f"The audio was successfully added to the video {edited_video_path}!",
-            "video_url": edited_video_url,
-        }
-    except Exception as ex:
-        logger.error(f"ERROR: add_audio_to_video {ex}")
-        return {
-            "status": "error",
-            "response": f"There was an error adding the audio to the video {ex}",
-        }
+#         return {
+#             "status": "success",
+#             "response": f"The audio was successfully added to the video {edited_video_path}!",
+#             "video_url": edited_video_url,
+#         }
+#     except Exception as ex:
+#         logger.error(f"ERROR: add_audio_to_video {ex}")
+#         return {
+#             "status": "error",
+#             "response": f"There was an error adding the audio to the video {ex}",
+#         }
 
 
-def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
+def add_audio_to_video_with_ffmpeg(
+    tool_context: ToolContext, 
+    start_offset: int,
+    volume_overlay: float,
+    volume_original: float
+) -> dict[str, str]:
     """
     Combines a video file with an audio file using FFmpeg.
 
@@ -211,6 +215,9 @@ def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
         tool_context (ToolContext): Contains state with:
             - `generated_audio_output_path` (str): Local path to the audio file.
             - `video_url` (str): GCS URL for the video file.
+        start_offset (int): Time in seconds to delay the start of the overlay audio.
+        volume_overlay (float): Volume level for the overlay audio (e.g., 0.5 for half volume).
+        volume_original (float): Volume level for the original audio (e.g., 1.0 for full volume).
 
     Returns:
         dict: A dictionary with 'status' and 'response' keys.
@@ -242,16 +249,20 @@ def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
         video_download_to_path,
         "-i",
         generated_audio_output_path,
+        "-filter_complex",
+        f"[0:a]volume={volume_original}[a0];"  # Adjust volume of original audio
+        f"[1:a]adelay={start_offset * 1000}|{start_offset * 1000},"  # Delay overlay audio
+        f"volume={volume_overlay}[a1];"  # Adjust volume of overlay audio
+        f"[a0][a1]amix=inputs=2:duration=longest[aout]",  # Mix both audio streams
+        "-map",
+        "0:v",  # Map the video stream from the input video
+        "-map",
+        "[aout]",  # Map the mixed audio stream
         "-c:v",
-        "copy",  # Copy video stream without re-encoding
+        "copy",  # Copy the video stream without re-encoding
         "-c:a",
-        "aac",  # Encode audio to AAC (a common and compatible format)
-        "-strict",
-        "experimental",  # Needed for some AAC encodings
-        "-map",
-        "0:v:0",  # Map the first video stream from the first input
-        "-map",
-        "1:a:0",  # Map the first audio stream from the second input
+        "aac",  # Encode audio to AAC
+        "-y",
         edited_video_path,
     ]
 
@@ -278,7 +289,7 @@ def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
         
         return {
             "status": "success",
-            "response": f"The audio was successfully added to the video!",
+            "response": "The audio was successfully added to the video!",
             "video_url": video_gcs_url,
         }
     except subprocess.CalledProcessError as ex:
@@ -297,53 +308,3 @@ def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
             "response": f"There was an error adding the audio to the video {ex}",
         }
 
-
-def overlay_audio_ffmpeg(
-    input_video,
-    overlay_audio,
-    output_video,
-    start_offset,
-    volume_overlay,
-    volume_original,
-):
-    """
-    Overlays a new audio file onto the existing audio of a video file using FFmpeg.
-
-    Args:
-        input_video (str): Path to the input video file with existing audio.
-        overlay_audio (str): Path to the audio file to overlay.
-        output_video (str): Path for the output video file.
-        start_offset (int): Time in seconds to delay the start of the overlay audio.
-        volume_overlay (float): Volume level for the overlay audio (e.g., 0.5 for half volume).
-        volume_original (float): Volume level for the original audio (e.g., 1.0 for full volume).
-    """
-
-    # Construct the FFmpeg command
-    command = [
-        "ffmpeg",
-        "-i",
-        input_video,
-        "-i",
-        overlay_audio,
-        "-filter_complex",
-        f"[0:a]volume={volume_original}[a0];"  # Adjust volume of original audio
-        f"[1:a]adelay={start_offset * 1000}|{start_offset * 1000},"  # Delay overlay audio
-        f"volume={volume_overlay}[a1];"  # Adjust volume of overlay audio
-        f"[a0][a1]amix=inputs=2:duration=longest[aout]",  # Mix both audio streams
-        "-map",
-        "0:v",  # Map the video stream from the input video
-        "-map",
-        "[aout]",  # Map the mixed audio stream
-        "-c:v",
-        "copy",  # Copy the video stream without re-encoding
-        "-c:a",
-        "aac",  # Encode audio to AAC
-        "-y",
-        output_video,  # Overwrite output if it exists
-    ]
-
-    try:
-        subprocess.run(command, check=True)
-        print(f"Audio overlay successful: {output_video}")
-    except subprocess.CalledProcessError as e:
-        print(f"Error during FFmpeg execution: {e}")

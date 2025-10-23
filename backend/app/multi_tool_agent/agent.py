@@ -278,14 +278,23 @@ USER QUERY: {query}
                 if session and hasattr(session, 'state'):
                     print(f"DEBUG: Session state keys: {session.state.keys()}")
                     print(f"DEBUG: Session state: {session.state}")
-                    if 'audio_urls' in session.state and session.state['audio_urls']:
-                        media_assets['audio_urls'] = session.state['audio_urls']
-                        print(f"DEBUG: Found audio URLs: {media_assets['audio_urls']}")
-                        session.state['audio_urls'] = []
-                    if 'edited_video_url' in session.state and session.state['edited_video_url']:
+                    
+                    has_audio = 'audio_urls' in session.state and session.state['audio_urls']
+                    has_video = 'edited_video_url' in session.state and session.state['edited_video_url']
+                    
+                    # If both audio and video are present, prefer video
+                    if has_video:
                         media_assets['video_url'] = session.state['edited_video_url']
                         print(f"DEBUG: Found video URL: {media_assets['video_url']}")
                         session.state['edited_video_url'] = None
+                        # Clear audio URLs since we're showing video
+                        if has_audio:
+                            session.state['audio_urls'] = []
+                    elif has_audio:
+                        # Only show audio if no video was generated
+                        media_assets['audio_urls'] = session.state['audio_urls']
+                        print(f"DEBUG: Found audio URLs: {media_assets['audio_urls']}")
+                        session.state['audio_urls'] = []
             except Exception as e:
                 print(f"Error getting session state: {e}")
             
