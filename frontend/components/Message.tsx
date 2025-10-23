@@ -36,8 +36,8 @@ const Message: React.FC<MessageProps> = ({ message }) => {
 
   return (
     <div className={`${containerClasses} group`}>
-      <div className={`flex items-start space-x-3 max-w-3xl ${contentOrder}`}>
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 ${isUser ? 'bg-blue-600' : 'bg-gray-200'}`}>
+      <div className={`flex items-start ${isUser ? 'space-x-3' : 'space-x-3'} max-w-3xl ${contentOrder}`}>
+        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1 ${isUser ? 'bg-blue-600 ml-3' : 'bg-gray-200'}`}>
           {icon}
         </div>
         <div className="flex flex-col space-y-3 flex-1">
