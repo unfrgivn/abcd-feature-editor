@@ -271,6 +271,8 @@ def add_audio_to_video_with_ffmpeg(
         "copy",  # Copy the video stream without re-encoding
         "-c:a",
         "aac",  # Encode audio to AAC
+        "-b:a",
+        "128k",  # Set audio bitrate to 128k to maintain quality
         "-y",
         edited_video_path,
     ]
