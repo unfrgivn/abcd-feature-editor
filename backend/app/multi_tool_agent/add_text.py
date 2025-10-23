@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import tempfile
@@ -6,6 +7,9 @@ from urllib.parse import unquote
 from google.adk.tools import ToolContext
 from google.cloud import storage
 from moviepy import CompositeVideoClip, TextClip, VideoFileClip
+
+from core.config import settings
+from .session_data import set_session_data
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +23,10 @@ async def add_text_to_video(
     fontsize: int,
     color: str,
     position: str,
-) -> str:
+) -> dict[str, str]:
     """
     Adds a text overlay to a video clip at a specified time and saves the result.
+    Uploads the edited video to GCS and returns the public URL.
 
     Args:
         output_video_path: The file path to save the output video (e.g., "edited_video.mp4").
@@ -35,7 +40,7 @@ async def add_text_to_video(
                   Defaults to 'center'.
 
     Returns:
-        A string message indicating success and the output path, or an error message.
+        A dictionary with status, message, and video_url.
     """
     video_url = tool_context.state.get("video_url")
     print("State URI:", video_url)
@@ -48,7 +53,6 @@ async def add_text_to_video(
 
     input_video_path = await tool_context.load_artifact(artifact_name)
 
-    # TODO: Replace with video from context once working
     bucket_name = video_url.split("/")[2]
     blob_path = unquote("/".join(video_url.split("/")[3:]))
 
@@ -64,25 +68,22 @@ async def add_text_to_video(
 
         if not os.path.exists(input_video_path):
             logger.error(f"Input video file not found: {input_video_path}")
-            return f"Error: Input video file not found at {input_video_path}"
+            return {"status": "error", "message": f"Input video file not found at {input_video_path}"}
 
         video_clip = None
         txt_clip = None
         result = None
 
         try:
-            # Load the main video clip
             video_clip = VideoFileClip(input_video_path)
 
-            # Ensure duration doesn't exceed video length
             video_duration = video_clip.duration
             if start_time > video_duration:
                 logger.warning(
                     f"Start time {start_time}s is after video duration {video_duration}s."
                 )
-                # Closing clip before returning error
                 video_clip.close()
-                return f"Error: Start time {start_time}s is after video duration {video_duration}s."
+                return {"status": "error", "message": f"Start time {start_time}s is after video duration {video_duration}s."}
 
             actual_duration = duration
             if start_time + duration > video_duration:
@@ -91,10 +92,7 @@ async def add_text_to_video(
                     f"Text duration truncated to {actual_duration}s to fit video length."
                 )
 
-            # Create the text clip
-            # Using a built-in font for better compatibility in containers
             txt_clip = TextClip(
-                # font="config/arial.ttf",
                 font=None,
                 text=text,
                 font_size=fontsize,
@@ -102,42 +100,57 @@ async def add_text_to_video(
                 duration=duration,
             ).with_position(position)
 
-            # Set position, start time, and duration
             txt_clip = (
                 txt_clip.with_position(position)
                 .with_start(start_time)
                 .with_duration(actual_duration)
             )
 
-            # Composite the video and text clips
             result = CompositeVideoClip([video_clip, txt_clip])
 
-            # Write the result to the output file
-            # Specifying codecs for broad compatibility
+            os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
+
             result.write_videofile(
                 output_video_path,
                 codec="libx264",
                 audio_codec="aac",
                 temp_audiofile="temp-audio.m4a",
                 remove_temp=True,
-                logger=None,  # To avoid moviepy's default verbose logging
+                logger=None,
             )
 
             logger.info(f"Successfully created video with text at {output_video_path}")
-            return f"Success: Video saved to {output_video_path}"
+
+            gcs_bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
+            file_name = f"video_{datetime.datetime.now().timestamp()}.mp4"
+            gcs_blob_path = f"videos/{file_name}"
+            gcs_blob = gcs_bucket.blob(gcs_blob_path)
+            
+            gcs_blob.upload_from_filename(output_video_path)
+            gcs_blob.reload()
+            
+            video_gcs_url = f"https://{settings.CDN_DOMAIN}/{gcs_blob_path}"
+            logger.info(f"Video uploaded to GCS: {video_gcs_url}")
+
+            tool_context.state["edited_video_url"] = video_gcs_url
+            set_session_data("latest_video_url", video_gcs_url)
+
+            return {
+                "status": "success",
+                "message": f"Video saved to {output_video_path}",
+                "video_url": video_gcs_url,
+            }
 
         except Exception as e:
-            # Check for common ImageMagick error
             if "ImageMagick is not installed" in str(e) or "convert: not found" in str(
                 e
             ):
                 logger.error("ImageMagick error: %s", e, exc_info=True)
-                return "Error: ImageMagick is not installed or configured correctly. TextClip requires it."
+                return {"status": "error", "message": "ImageMagick is not installed or configured correctly. TextClip requires it."}
             logger.error(f"Failed to process video: {e}", exc_info=True)
-            return f"Error: Failed to process video. {str(e)}"
+            return {"status": "error", "message": f"Failed to process video. {str(e)}"}
 
         finally:
-            # Close clips to release file handles
             if video_clip:
                 video_clip.close()
             if txt_clip:

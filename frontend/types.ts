@@ -3,9 +3,15 @@ export enum Role {
   MODEL = 'model',
 }
 
+export interface MediaAttachment {
+  audio_urls?: string[];
+  video_url?: string;
+}
+
 export interface Message {
   role: Role;
   text: string;
+  media?: MediaAttachment;
 }
 
 export interface Feature {
