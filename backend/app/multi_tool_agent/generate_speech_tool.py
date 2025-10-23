@@ -240,3 +240,54 @@ def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
             "status": "error",
             "response": f"There was an error adding the audio to the video {ex}",
         }
+
+
+def overlay_audio_ffmpeg(
+    input_video,
+    overlay_audio,
+    output_video,
+    start_offset,
+    volume_overlay,
+    volume_original,
+):
+    """
+    Overlays a new audio file onto the existing audio of a video file using FFmpeg.
+
+    Args:
+        input_video (str): Path to the input video file with existing audio.
+        overlay_audio (str): Path to the audio file to overlay.
+        output_video (str): Path for the output video file.
+        start_offset (int): Time in seconds to delay the start of the overlay audio.
+        volume_overlay (float): Volume level for the overlay audio (e.g., 0.5 for half volume).
+        volume_original (float): Volume level for the original audio (e.g., 1.0 for full volume).
+    """
+
+    # Construct the FFmpeg command
+    command = [
+        "ffmpeg",
+        "-i",
+        input_video,
+        "-i",
+        overlay_audio,
+        "-filter_complex",
+        f"[0:a]volume={volume_original}[a0];"  # Adjust volume of original audio
+        f"[1:a]adelay={start_offset * 1000}|{start_offset * 1000},"  # Delay overlay audio
+        f"volume={volume_overlay}[a1];"  # Adjust volume of overlay audio
+        f"[a0][a1]amix=inputs=2:duration=longest[aout]",  # Mix both audio streams
+        "-map",
+        "0:v",  # Map the video stream from the input video
+        "-map",
+        "[aout]",  # Map the mixed audio stream
+        "-c:v",
+        "copy",  # Copy the video stream without re-encoding
+        "-c:a",
+        "aac",  # Encode audio to AAC
+        "-y",
+        output_video,  # Overwrite output if it exists
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        print(f"Audio overlay successful: {output_video}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error during FFmpeg execution: {e}")
