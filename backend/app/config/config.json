@@ -26,5 +26,21 @@
     "primary_brand_color": "#5db1bd",
     "secondary_brand_color": "#313e48",
     "brand_tone": "The brand's tone is professional, empowering, and supportive, emphasizing student transformation and success through authentic, hands-on, and engaging learning experiences. It strives to be credible, cohesive, and inclusive, reflecting a positive and energetic environment focused on practical outcomes."
+  },
+  {
+    "id": "a_voice_and_tone",
+    "name": "Puffer Jacket (no supers)",
+    "category": "Attract",
+    "description": "The speech heard in the audio of the video matches the brand's voice and tone guidelines.",
+    "detected": false,
+    "llmExplanation": "The video's audio",
+    "isFixed": false,
+    "videoId": "VID-CHAT-201",
+    "videoUrl": "https://storage.googleapis.com/bkt-plrs-prd-creative-audit-vizf/C61558829/videos/Video_VI56s_SuperPuffInfluencers.Becky_Aritzia_SuperPuffInfluencers.Becky_WI24_BAU_Neutral_IC_SuperPuffLP_US_CA_1.31",
+    "primary_brand_color": "#5db1bd",
+    "secondary_brand_color": "#313e48",
+    "brand_tone": "The brand's tone is professional, empowering, and supportive, emphasizing student transformation and success through authentic, hands-on, and engaging learning experiences. It strives to be credible, cohesive, and inclusive, reflecting a positive and energetic environment focused on practical outcomes."
   }
 ]
+
+

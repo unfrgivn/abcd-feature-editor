@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import subprocess
@@ -198,8 +199,18 @@ async def add_text_to_video_with_ffmpeg(
 
     input_video_path = await tool_context.load_artifact(artifact_name)
 
-    # TODO: Figure out background color and location automatically
-    bg_color = "0x1e1e1e@0.8"
+    config_path = os.path.join(os.path.dirname(__file__), "../config/config.json")
+    with open(config_path, "r") as f:
+        config_data = json.load(f)
+    
+    primary_brand_color = "#1e1e1e"
+    for item in config_data:
+        if item.get("videoUrl") == video_url or item.get("videoUrl") == tool_context.state.get("video_url"):
+            primary_brand_color = item.get("primary_brand_color", "#1e1e1e")
+            break
+    
+    brand_color_hex = primary_brand_color.lstrip("#")
+    bg_color = f"0x{brand_color_hex}@0.8"
 
     # TODO: Replace with video from context once working
     if video_url.startswith("gs://"):
