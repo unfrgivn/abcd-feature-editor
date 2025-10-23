@@ -227,20 +227,29 @@ def add_audio_to_video_with_ffmpeg(
     logger.info(
         f"This is generated_audio_output_path: {generated_audio_output_path} \n"
     )
-    video_url = tool_context.state.get("video_url")
-    logger.info(f"This is video_url: {generated_audio_output_path} \n")
+    video_url = tool_context.state.get("edited_video_url") or tool_context.state.get("video_url")
+    logger.info(f"This is video_url: {video_url} \n")
     # generated_audio_output_path = "video_edits/speech_output/sample-3s.mp3"
     # video_url = "gs://change-makers-demo/video_test.mp4"
 
-    bucket_name = video_url.split("/")[2]
-    blob_path = unquote("/".join(video_url.split("/")[3:]))
+    if video_url.startswith("gs://"):
+        bucket_name = video_url.split("/")[2]
+        blob_path = unquote("/".join(video_url.split("/")[3:]))
+    else:
+        parts = video_url.split("/")
+        bucket_name = parts[3]
+        blob_path = unquote("/".join(parts[4:]))
+    
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_path)
-    video_download_to_path = f"video_edits/videos/{blob.name}"
+    
+    original_filename = os.path.basename(blob_path)
+    video_download_to_path = f"video_edits/videos/{original_filename}"
+    os.makedirs(os.path.dirname(video_download_to_path), exist_ok=True)
     blob.download_to_filename(video_download_to_path)
 
-    edited_video_name = f"{blob.name}_edited_{datetime.datetime.now().timestamp()}.mp4"
+    edited_video_name = f"{os.path.splitext(original_filename)[0]}_edited_{datetime.datetime.now().timestamp()}.mp4"
     edited_video_path = f"video_edits/videos/{edited_video_name}"
 
     command = [
@@ -278,7 +287,7 @@ def add_audio_to_video_with_ffmpeg(
         
         gcs_blob.upload_from_filename(edited_video_path)
         gcs_blob.reload()
-        
+ 
         video_gcs_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
         logger.info(f"Edited video uploaded to GCS: {video_gcs_url}")
         

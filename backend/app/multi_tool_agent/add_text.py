@@ -187,7 +187,7 @@ async def add_text_to_video_with_ffmpeg(
     Returns:
         A string message indicating success and the output path, or an error message.
     """
-    video_url = tool_context.state.get("video_url")
+    video_url = tool_context.state.get("edited_video_url") or tool_context.state.get("video_url")
     print("State URI:", video_url)
 
     artifact_name = tool_context.state.get("temp:video")
@@ -202,8 +202,13 @@ async def add_text_to_video_with_ffmpeg(
     bg_color = "0x1e1e1e@0.8"
 
     # TODO: Replace with video from context once working
-    bucket_name = video_url.split("/")[2]
-    blob_path = unquote("/".join(video_url.split("/")[3:]))
+    if video_url.startswith("gs://"):
+        bucket_name = video_url.split("/")[2]
+        blob_path = unquote("/".join(video_url.split("/")[3:]))
+    else:
+        parts = video_url.split("/")
+        bucket_name = parts[3]
+        blob_path = unquote("/".join(parts[4:]))
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
