@@ -15,7 +15,6 @@ from google.adk.artifacts import InMemoryArtifactService
 from google.adk.models import LlmRequest, LlmResponse
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from google.adk.tools import load_artifacts
 from google.cloud import storage
 from google.genai import types
 
@@ -233,34 +232,38 @@ def call_agent(query, feature_id=None):
 
     current_recommendations = get_session_data("current_recommendations")
     print("Current recommendations from session data: ", current_recommendations)
-    
+
     if feature_id:
         feature_config = get_feature_config(feature_id)
         if feature_config:
-            parts.append(types.Part(text=f"""
+            parts.append(
+                types.Part(
+                    text=f"""
 FEATURE CONTEXT:
-- Feature Name: {feature_config.get('name')}
-- Description: {feature_config.get('description')}
-- Currently Detected: {feature_config.get('detected')}
-- LLM Explanation: {feature_config.get('llmExplanation')}
-- Video URL: {feature_config.get('videoUrl')}
+- Feature Name: {feature_config.get("name")}
+- Description: {feature_config.get("description")}
+- Currently Detected: {feature_config.get("detected")}
+- LLM Explanation: {feature_config.get("llmExplanation")}
+- Video URL: {feature_config.get("videoUrl")}
 - Current Recommendations: {current_recommendations}
 
 USER QUERY: {query}
-"""))
-            video_url = feature_config.get("videoUrl")
-            if video_url:
-                print(f"Adding video context from {video_url} for feature {feature_id}")
-                video_part = types.Part.from_uri(
-                    file_uri=video_url,
-                    mime_type="video/*",
+"""
                 )
-                parts.append(video_part)
-            else:
-                print(f"No videoUrl found for feature {feature_id}")
+            )
+            # video_url = feature_config.get("videoUrl")
+            # if video_url:
+            #     print(f"Adding video context from {video_url} for feature {feature_id}")
+            #     video_part = types.Part.from_uri(
+            #         file_uri=video_url,
+            #         mime_type="video/*",
+            #     )
+            #     parts.append(video_part)
+            # else:
+            #     print(f"No videoUrl found for feature {feature_id}")
         else:
             print(f"Feature config not found for id: {feature_id}")
-    
+
     content = types.Content(role="user", parts=parts)
     print("Running agent...")
     events = AGENT_RUNNER.run(
@@ -356,13 +359,19 @@ async def init_agent(
 
 
 def create_agent():
-    tools = [set_supers_audio_recommendation, set_supers_text_recommendations, get_current_recommendations]
+    tools = [
+        set_supers_audio_recommendation,
+        set_supers_text_recommendations,
+        get_current_recommendations,
+        generate_speech_from_text,
+        add_text_to_video,
+    ]
 
     name = "ai_editor_agent"
 
     description = """"""  ## TODO!!!
-    
-    instruction = f"""
+
+    instruction = """
     You are an AI editor agent specialized in video content analysis and editing recommendations.
     
     Your task is to assist users in editing video content based on the provided feature descriptions and video analysis.
@@ -372,7 +381,6 @@ def create_agent():
     - Description: A detailed description of what the feature represents
     - Detection Status: Whether this feature is currently detected in the video
     - LLM Explanation: Previous analysis or explanation about this feature
-    - Video URL: A link to the video content related to this feature.
     - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
 
     If the user is not pleased with the `Current Recommendations` or if there are no `Current Recommendations`,
