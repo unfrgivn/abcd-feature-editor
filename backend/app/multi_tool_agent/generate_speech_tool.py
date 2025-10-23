@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def generate_speech_from_text(
-    tool_context: ToolContext, text_for_speech: str, video_url: str
+    tool_context: ToolContext, text_for_speech: str
 ):
     """Generates an audio file from text using Google Text To Speech.
 
@@ -28,7 +28,6 @@ def generate_speech_from_text(
     Args:
         tool_context (ToolContext): The context object for state management.
         text_for_speech (str): The text to be synthesized.
-        video_url (str): The video URL to pass to the next tool's state.
 
     Returns:
         dict: A dictionary with 'status', 'response', and 'audio_url' keys.
@@ -36,6 +35,8 @@ def generate_speech_from_text(
 
     try:
         from multi_tool_agent.session_data import set_session_data
+        
+        video_url = tool_context.state.get("video_url")
         
         logger.info("This is the text for the audio:" + text_for_speech)
         default_voice = {
@@ -259,9 +260,26 @@ def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
         logger.info(
             f"Successfully added audio to video. Output saved to: {edited_video_path}"
         )
+        
+        gcs_bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
+        gcs_blob_path = f"videos/{edited_video_name}"
+        gcs_blob = gcs_bucket.blob(gcs_blob_path)
+        
+        gcs_blob.upload_from_filename(edited_video_path)
+        gcs_blob.reload()
+        
+        video_gcs_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
+        logger.info(f"Edited video uploaded to GCS: {video_gcs_url}")
+        
+        tool_context.state["edited_video_url"] = video_gcs_url
+        
+        from multi_tool_agent.session_data import set_session_data
+        set_session_data("latest_video_url", video_gcs_url)
+        
         return {
             "status": "success",
-            "response": f"The audio was successfully added to the video {edited_video_path}!",
+            "response": f"The audio was successfully added to the video!",
+            "video_url": video_gcs_url,
         }
     except subprocess.CalledProcessError as ex:
         logger.error(f"Error adding audio to video: {ex}")
