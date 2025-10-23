@@ -33,7 +33,7 @@ APP_NAME = "wpromote-codesprint-2025"
 USER_ID = "user1"
 SESSION_ID = "session1"
 
-TEST_FEATURE_ID = "a_supers_with_audio"
+# TEST_FEATURE_ID = "a_supers_with_audio"
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "config.json"
 
 UPLOADED_VIDEO_CACHE = {}
@@ -229,7 +229,7 @@ CURRENT_FEATURE_ID = None
 def call_agent(query, feature_id=None):
     """"""
     global CURRENT_FEATURE_ID
-    CURRENT_FEATURE_ID = feature_id or TEST_FEATURE_ID
+    CURRENT_FEATURE_ID = feature_id
 
     parts = [types.Part(text=query)]
 
@@ -248,6 +248,7 @@ FEATURE CONTEXT:
 - Currently Detected: {feature_config.get("detected")}
 - LLM Explanation: {feature_config.get("llmExplanation")}
 - Video URL: {feature_config.get("videoUrl")}
+- Brand Tone: {feature_config.get("brand_tone")}
 - Current Recommendations: {current_recommendations}
 
 USER QUERY: {query}
@@ -316,7 +317,7 @@ async def init_agent(
         f"Callback running before model call for agent: {callback_context.agent_name}"
     )
 
-    feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
+    feature_id = CURRENT_FEATURE_ID
     feature_config = get_feature_config(feature_id)
     if feature_config and feature_config.get("videoUrl"):
         video_url = feature_config["videoUrl"]
