@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import Response
 from multi_tool_agent import agent
+from multi_tool_agent.cleanup import cleanup_all
 from models.request_models import UserQuery
 
 router = APIRouter()
@@ -37,6 +38,28 @@ async def call_ai_editor_agent(userQuery: UserQuery):
     except Exception as ex:
         logging.error("AI Editor Agent - ERROR:  %s", str(ex))
 
+        return Response(
+            content=f"ERROR: {ex}. Please try again.",
+            status_code=500,
+        )
+
+
+@router.post("/cleanup")
+async def cleanup_session():
+    """Clear session state and delete temporary files"""
+    try:
+        result = cleanup_all(
+            session_service=agent.session_service,
+            app_name=agent.APP_NAME,
+            user_id=agent.USER_ID,
+            session_id=agent.SESSION_ID
+        )
+        
+        import json
+        return Response(content=json.dumps(result), status_code=200)
+    except Exception as ex:
+        logging.error("Cleanup - ERROR: %s", str(ex))
+        
         return Response(
             content=f"ERROR: {ex}. Please try again.",
             status_code=500,

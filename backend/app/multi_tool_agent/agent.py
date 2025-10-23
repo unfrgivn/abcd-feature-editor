@@ -427,16 +427,29 @@ def create_agent():
           - For text-only Supers: Call `set_supers_text_recommendations` tool
        
        c) IMMEDIATELY generate the actual media:
-          - For Supers with Audio: ALWAYS call `generate_speech_from_text` to create the audio file
+          - For Supers with Audio: 
+            * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
+            * Then ask the user to review the audio preview
+            * Ask if they want to generate the video with this voiceover
+            * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
           - For text-only Supers: ALWAYS call `add_text_to_video_with_ffmpeg` to create the video with text overlay
        
        d) Finally, call `get_current_recommendations` to retrieve and describe them
     
     WORKFLOW FOR USER EDITS:
-    When a user requests changes to audio or text, ALWAYS generate the actual media files:
-    - For audio changes: Use `generate_speech_from_text` to create the audio file
+    When a user requests changes to audio or text:
+    - For audio changes: 
+      * Use `generate_speech_from_text` to create the audio file preview
+      * Ask the user to review the audio
+      * Ask if they want to generate the video with this voiceover
+      * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
     - For text overlay changes: Use `add_text_to_video_with_ffmpeg` to create the video with text
     - Don't just describe what you would do - actually call the tool to generate the file
+    
+    VOICEOVER COPY RULES:
+    - Voiceover copy MUST be 1-2 sentences maximum
+    - Keep it concise, punchy, and impactful
+    - Never generate voiceover copy longer than 2 sentences
     
     IMPORTANT: When you generate audio files or videos using the tools, DO NOT include the file URLs (like https://storage.googleapis.com/...) in your text response. The generated media will automatically appear as playable previews below your message. Only describe what you've created in natural language.
     """
