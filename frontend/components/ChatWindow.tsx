@@ -17,6 +17,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isTopPaneCollapsed, setIsTopPaneCollapsed] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef<boolean>(false);
 
@@ -64,22 +65,38 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
         query: inputText,
         feature_id: featureToEdit?.id,
       });
-      const botMessage: MessageType = { role: Role.MODEL, text: data };
-      setMessages((prev) => [...prev, botMessage]);
-      /*await geminiService.sendMessageStream(inputText, (chunk) => {
-        setMessages(prevMessages => {
-          const lastMessage = prevMessages[prevMessages.length - 1];
-          if (lastMessage.role === Role.MODEL) {
-            const updatedMessages = [...prevMessages];
-            updatedMessages[prevMessages.length - 1] = {
-              ...lastMessage,
-              text: lastMessage.text + chunk,
+      
+      console.log('DEBUG: Backend response type:', typeof data);
+      console.log('DEBUG: Backend response:', data);
+      
+      let botMessage: MessageType;
+      
+      if (typeof data === 'object' && data.text) {
+        botMessage = { 
+          role: Role.MODEL, 
+          text: data.text,
+          media: data.media
+        };
+      } else if (typeof data === 'string') {
+        try {
+          const parsedData = JSON.parse(data);
+          if (parsedData.text && parsedData.media) {
+            botMessage = { 
+              role: Role.MODEL, 
+              text: parsedData.text,
+              media: parsedData.media
             };
-            return updatedMessages;
+          } else {
+            botMessage = { role: Role.MODEL, text: data };
           }
-          return prevMessages;
-        });
-      });*/
+        } catch (e) {
+          botMessage = { role: Role.MODEL, text: data };
+        }
+      } else {
+        botMessage = { role: Role.MODEL, text: String(data) };
+      }
+      
+      setMessages((prev) => [...prev.slice(0, -1), botMessage]);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
       setMessages(prev => [...prev.slice(0, -1), { role: Role.MODEL, text: `Error: ${errorMessage}` }]);
@@ -103,10 +120,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
           allowFullScreen
         ></iframe>
       );
-    } else if (url.includes('storage.googleapis.com')) {
+    } else if (url.includes('storage.googleapis.com') || url.includes('creative-audit.prd.cdn.polaris.prd.ext.wpromote.com') || url.startsWith('gs://')) {
+      let videoUrl = url;
+      if (url.startsWith('gs://')) {
+        const pathWithoutProtocol = url.substring(5);
+        const bucketAndPath = pathWithoutProtocol.split('/');
+        const pathOnly = bucketAndPath.slice(1).join('/');
+        videoUrl = `https://creative-audit.prd.cdn.polaris.prd.ext.wpromote.com/${pathOnly}`;
+      } else if (url.includes('storage.googleapis.com')) {
+        const match = url.match(/storage\.googleapis\.com\/[^\/]+\/(.+)/);
+        if (match && match[1]) {
+          videoUrl = `https://creative-audit.prd.cdn.polaris.prd.ext.wpromote.com/${match[1]}`;
+        }
+      }
       return (
         <video className="w-full aspect-video rounded-lg bg-black" controls>
-          <source src={url} type="video/mp4" />
+          <source src={videoUrl} type="video/mp4" />
           Your browser does not support the video tag.
         </video>
       );
@@ -141,20 +170,40 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
       )}
       
       {featureToEdit && (
-        <div className="p-4 sm:p-6 border-b border-slate-700 flex-shrink-0">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <div>
-              {renderVideoPlayer(featureToEdit.videoUrl)}
+        <div className="border-b border-slate-700 flex-shrink-0">
+          <button
+            onClick={() => setIsTopPaneCollapsed(!isTopPaneCollapsed)}
+            className="w-full p-3 bg-slate-800/50 hover:bg-slate-800 transition-colors flex items-center justify-between"
+          >
+            <span className="text-sm text-slate-400">
+              {isTopPaneCollapsed ? 'Show' : 'Hide'} Feature Details
+            </span>
+            <svg
+              className={`w-5 h-5 text-slate-400 transition-transform ${isTopPaneCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          {!isTopPaneCollapsed && (
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                <div>
+                  {renderVideoPlayer(featureToEdit.videoUrl)}
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-xl font-bold text-white">{featureToEdit.name}</h3>
+                  <p className="text-sm font-mono text-slate-400 bg-slate-800/50 rounded px-2 py-1 inline-block">{featureToEdit.videoId}</p>
+                  <p className="text-slate-300">{featureToEdit.llmExplanation}</p>
+                  <a href={featureToEdit.videoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block break-all">
+                    {featureToEdit.videoUrl}
+                  </a>
+                </div>
+              </div>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-xl font-bold text-white">{featureToEdit.name}</h3>
-              <p className="text-sm font-mono text-slate-400 bg-slate-800/50 rounded px-2 py-1 inline-block">{featureToEdit.videoId}</p>
-              <p className="text-slate-300">{featureToEdit.llmExplanation}</p>
-              <a href={featureToEdit.videoUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block break-all">
-                {featureToEdit.videoUrl}
-              </a>
-            </div>
-          </div>
+          )}
         </div>
       )}
       

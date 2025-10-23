@@ -251,16 +251,6 @@ USER QUERY: {query}
 """
                 )
             )
-            # video_url = feature_config.get("videoUrl")
-            # if video_url:
-            #     print(f"Adding video context from {video_url} for feature {feature_id}")
-            #     video_part = types.Part.from_uri(
-            #         file_uri=video_url,
-            #         mime_type="video/*",
-            #     )
-            #     parts.append(video_part)
-            # else:
-            #     print(f"No videoUrl found for feature {feature_id}")
         else:
             print(f"Feature config not found for id: {feature_id}")
 
@@ -270,9 +260,37 @@ USER QUERY: {query}
         user_id=USER_ID, session_id=SESSION_ID, new_message=content
     )
     print("Processing agent responses...")
+    
+    media_assets = {}
     for event in events:
         if event.is_final_response() and event.content:
             resp = event.content.parts[0].text.strip()
+            
+            try:
+                session = AGENT_RUNNER.session_service.get_session_sync(
+                    app_name=APP_NAME, 
+                    user_id=USER_ID, 
+                    session_id=SESSION_ID
+                )
+                if session and hasattr(session, 'state'):
+                    print(f"DEBUG: Session state keys: {session.state.keys()}")
+                    print(f"DEBUG: Session state: {session.state}")
+                    if 'audio_urls' in session.state and session.state['audio_urls']:
+                        media_assets['audio_urls'] = session.state['audio_urls']
+                        print(f"DEBUG: Found audio URLs: {media_assets['audio_urls']}")
+                        session.state['audio_urls'] = []
+                    if 'edited_video_url' in session.state:
+                        media_assets['video_url'] = session.state['edited_video_url']
+                        print(f"DEBUG: Found video URL: {media_assets['video_url']}")
+            except Exception as e:
+                print(f"Error getting session state: {e}")
+            
+            if media_assets:
+                import json
+                return json.dumps({
+                    "text": resp,
+                    "media": media_assets
+                })
             return resp
 
     return None
@@ -388,6 +406,8 @@ def create_agent():
     Never use both tools.
 
     Finally, use the get_current_recommendations tool to retrieve the latest recommendations and describe them to the user.
+    
+    IMPORTANT: When you generate audio files or videos using the tools, DO NOT include the file URLs (like https://storage.googleapis.com/...) in your text response. The generated media will automatically appear as playable previews below your message. Only describe what you've created in natural language.
     """
 
     agent = LlmAgent(
