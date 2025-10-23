@@ -79,7 +79,7 @@ def generate_speech_from_text(
         blob.upload_from_filename(output_path)
         blob.reload()
         
-        audio_url = f"https://{settings.CDN_DOMAIN}/{blob_path}"
+        audio_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{blob_path}"
         logger.info(f"Audio uploaded to GCS: {audio_url}")
 
         tool_context.state["generated_audio_output_path"] = output_path
@@ -179,7 +179,7 @@ def add_audio_to_video(tool_context: ToolContext):
         gcs_blob.upload_from_filename(edited_video_path)
         gcs_blob.reload()
         
-        edited_video_url = f"https://{settings.CDN_DOMAIN}/{gcs_blob_path}"
+        edited_video_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
         logger.info(f"Edited video uploaded to GCS: {edited_video_url}")
 
         tool_context.state["edited_video_url"] = edited_video_url

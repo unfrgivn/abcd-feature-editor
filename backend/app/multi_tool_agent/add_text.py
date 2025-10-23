@@ -130,7 +130,7 @@ async def add_text_to_video(
             gcs_blob.upload_from_filename(output_video_path)
             gcs_blob.reload()
             
-            video_gcs_url = f"https://{settings.CDN_DOMAIN}/{gcs_blob_path}"
+            video_gcs_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
             logger.info(f"Video uploaded to GCS: {video_gcs_url}")
 
             tool_context.state["edited_video_url"] = video_gcs_url
