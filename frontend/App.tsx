@@ -28,7 +28,14 @@ function App() {
     fetchFeatures();
   }, []);
 
-  const handleStartEdit = (feature: Feature) => {
+  const handleStartEdit = async (feature: Feature) => {
+    try {
+      await axios.post('http://127.0.0.1:8000/api/cleanup');
+      console.log('Session cleaned up successfully');
+    } catch (error) {
+      console.error('Error cleaning up session:', error);
+    }
+    
     setEditingFeature(feature);
     setView('chat');
   };

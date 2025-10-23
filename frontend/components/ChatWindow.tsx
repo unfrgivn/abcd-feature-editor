@@ -283,6 +283,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose }) => {
           <div className="flex justify-start">
              <div className="flex items-center space-x-2">
                  <div className="bg-white border border-gray-200 p-3 rounded-lg flex items-center space-x-2 shadow-sm">
+                     <span className="text-sm text-blue-500">Maximizing Google Ad Revenue</span>
                      <span className="h-2 w-2 bg-blue-500 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
                      <span className="h-2 w-2 bg-blue-500 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
                      <span className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></span>
