@@ -6,6 +6,7 @@ from google.adk.tools import ToolContext
 from google.cloud import storage
 from urllib.parse import unquote
 import logging
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,88 @@ def add_audio_to_video(tool_context: ToolContext):
         }
     except Exception as ex:
         logger.error(f"ERROR: add_audio_to_video {ex}")
+        return {
+            "status": "error",
+            "response": f"There was an error adding the audio to the video {ex}",
+        }
+
+
+def add_audio_to_video_with_ffmpeg(tool_context: ToolContext):
+    """
+    Combines a video file with an audio file using FFmpeg.
+
+    Downloads the video from GCS (via `video_url`), replaces its
+    audio with the local file (`generated_audio_output_path`), and
+    saves the result locally.
+
+    Args:
+        tool_context (ToolContext): Contains state with:
+            - `generated_audio_output_path` (str): Local path to the audio file.
+            - `video_url` (str): GCS URL for the video file.
+
+    Returns:
+        dict: A dictionary with 'status' and 'response' keys.
+    """
+
+    generated_audio_output_path = tool_context.state.get("generated_audio_output_path")
+    logger.info(
+        f"This is generated_audio_output_path: {generated_audio_output_path} \n"
+    )
+    video_url = tool_context.state.get("video_url")
+    logger.info(f"This is video_url: {generated_audio_output_path} \n")
+    # generated_audio_output_path = "video_edits/speech_output/sample-3s.mp3"
+    # video_url = "gs://change-makers-demo/video_test.mp4"
+
+    bucket_name = video_url.split("/")[2]
+    blob_path = unquote("/".join(video_url.split("/")[3:]))
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_path)
+    video_download_to_path = f"video_edits/videos/{blob.name}"
+    blob.download_to_filename(video_download_to_path)
+
+    edited_video_name = f"{blob.name}_edited_{datetime.datetime.now().timestamp()}.mp4"
+    edited_video_path = f"video_edits/videos/{edited_video_name}"
+
+    command = [
+        "ffmpeg",
+        "-i",
+        video_download_to_path,
+        "-i",
+        generated_audio_output_path,
+        "-c:v",
+        "copy",  # Copy video stream without re-encoding
+        "-c:a",
+        "aac",  # Encode audio to AAC (a common and compatible format)
+        "-strict",
+        "experimental",  # Needed for some AAC encodings
+        "-map",
+        "0:v:0",  # Map the first video stream from the first input
+        "-map",
+        "1:a:0",  # Map the first audio stream from the second input
+        edited_video_path,
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        logger.info(
+            f"Successfully added audio to video. Output saved to: {edited_video_path}"
+        )
+        return {
+            "status": "success",
+            "response": f"The audio was successfully added to the video {edited_video_path}!",
+        }
+    except subprocess.CalledProcessError as ex:
+        logger.error(f"Error adding audio to video: {ex}")
+        logger.error(f"FFmpeg output: {ex.stderr.decode()}")
+        return {
+            "status": "error",
+            "response": f"There was an error adding the audio to the video {ex}",
+        }
+    except FileNotFoundError as ex:
+        logger.error(
+            "FFmpeg command not found. Please ensure FFmpeg is installed and in your system's PATH."
+        )
         return {
             "status": "error",
             "response": f"There was an error adding the audio to the video {ex}",
