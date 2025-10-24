@@ -1,12 +1,9 @@
-import datetime
 import logging
 import os
-import subprocess
-from urllib.parse import unquote
 
-from core.config import settings
 from google.adk.tools import ToolContext
-from google.cloud import storage, texttospeech
+from services.text_to_speech_service import text_to_speech_service
+from services.video_editing_service import video_editing_service
 
 logger = logging.getLogger(__name__)
 
@@ -31,82 +28,42 @@ def generate_speech_from_text(
     Returns:
         dict: A dictionary with 'status', 'response', and 'audio_url' keys.
     """
-
     try:
         from multi_tool_agent.session_data import set_session_data
         
         video_url = tool_context.state.get("video_url")
+        logger.info(f"Generating speech for text: {text_for_speech}")
         
-        logger.info("This is the text for the audio:" + text_for_speech)
-        default_voice = {
-            "voice_name": "en-US-Chirp3-HD-Charon",
-            "language_code": "en-US",
-        }
-
-        client = texttospeech.TextToSpeechClient()
-
-        input_text = texttospeech.SynthesisInput(text=text_for_speech)
-
-        voice = texttospeech.VoiceSelectionParams(
-            language_code=default_voice["language_code"],
-            name=default_voice["voice_name"],
-        )
-
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
-
-        response = client.synthesize_speech(
-            input=input_text,
-            voice=voice,
-            audio_config=audio_config,
-        )
-
-        file_name = f"output_{datetime.datetime.now().timestamp()}.mp3"
-        output_path = f"video_edits/speech_output/{file_name}"
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-        with open(f"{output_path}", "wb") as out:
-            out.write(response.audio_content)
-            logger.info(f"Audio content written to file {output_path}")
-
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
-        blob_path = f"audio/{file_name}"
-        blob = bucket.blob(blob_path)
+        result = text_to_speech_service.generate_speech(text_for_speech)
         
-        blob.upload_from_filename(output_path)
-        blob.reload()
-        
-        audio_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{blob_path}"
-        logger.info(f"Audio uploaded to GCS: {audio_url}")
-
-        tool_context.state["generated_audio_output_path"] = output_path
-        tool_context.state["video_url"] = video_url
-        
-        if "audio_urls" not in tool_context.state:
-            tool_context.state["audio_urls"] = []
-        tool_context.state["audio_urls"].append(audio_url)
-        
-        from multi_tool_agent.session_data import get_session_data
-        current_audio_urls = get_session_data("audio_urls")
-        if not isinstance(current_audio_urls, list):
-            current_audio_urls = []
-        current_audio_urls.append(audio_url)
-        set_session_data("audio_urls", current_audio_urls)
-
-        return {
-            "status": "success",
-            "response": {
-                "message": "Audio generated successfully!",
-                "generated_audio_path": output_path,
-                "audio_url": audio_url,
-            },
-        }
+        if result["status"] == "success":
+            tool_context.state["generated_audio_output_path"] = result.get("local_path")
+            tool_context.state["video_url"] = video_url
+            
+            if "audio_urls" not in tool_context.state:
+                tool_context.state["audio_urls"] = []
+            tool_context.state["audio_urls"].append(result["audio_url"])
+            
+            from multi_tool_agent.session_data import get_session_data
+            current_audio_urls = get_session_data("audio_urls")
+            if not isinstance(current_audio_urls, list):
+                current_audio_urls = []
+            current_audio_urls.append(result["audio_url"])
+            set_session_data("audio_urls", {"urls": current_audio_urls})
+            
+            return {
+                "status": "success",
+                "response": {
+                    "message": result["message"],
+                    "audio_url": result["audio_url"],
+                },
+            }
+        else:
+            return {"status": "error", "response": result["message"]}
+            
     except Exception as ex:
         logger.error(f"ERROR: generate_speech_from_text {ex}")
-        return {"status": "ERROR", "response": str(ex)}
+        return {"status": "error", "response": str(ex)}
 
 
 # def add_audio_to_video(tool_context: ToolContext):
@@ -222,100 +179,46 @@ def add_audio_to_video_with_ffmpeg(
     Returns:
         dict: A dictionary with 'status' and 'response' keys.
     """
-
-    generated_audio_output_path = tool_context.state.get("generated_audio_output_path")
-    logger.info(
-        f"This is generated_audio_output_path: {generated_audio_output_path} \n"
-    )
-    video_url = tool_context.state.get("edited_video_url") or tool_context.state.get("video_url")
-    logger.info(f"This is video_url: {video_url} \n")
-    # generated_audio_output_path = "video_edits/speech_output/sample-3s.mp3"
-    # video_url = "gs://change-makers-demo/video_test.mp4"
-
-    if video_url.startswith("gs://"):
-        bucket_name = video_url.split("/")[2]
-        blob_path = unquote("/".join(video_url.split("/")[3:]))
-    else:
-        parts = video_url.split("/")
-        bucket_name = parts[3]
-        blob_path = unquote("/".join(parts[4:]))
-    
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_path)
-    
-    original_filename = os.path.basename(blob_path)
-    video_download_to_path = f"video_edits/videos/{original_filename}"
-    os.makedirs(os.path.dirname(video_download_to_path), exist_ok=True)
-    blob.download_to_filename(video_download_to_path)
-
-    edited_video_name = f"{os.path.splitext(original_filename)[0]}_edited_{datetime.datetime.now().timestamp()}.mp4"
-    edited_video_path = f"video_edits/videos/{edited_video_name}"
-
-    command = [
-        "ffmpeg",
-        "-i",
-        video_download_to_path,
-        "-i",
-        generated_audio_output_path,
-        "-filter_complex",
-        f"[0:a]volume={volume_original}[a0];"  # Adjust volume of original audio
-        f"[1:a]adelay={start_offset * 1000}|{start_offset * 1000},"  # Delay overlay audio
-        f"volume={volume_overlay}[a1];"  # Adjust volume of overlay audio
-        f"[a0][a1]amix=inputs=2:duration=longest[aout]",  # Mix both audio streams
-        "-map",
-        "0:v",  # Map the video stream from the input video
-        "-map",
-        "[aout]",  # Map the mixed audio stream
-        "-c:v",
-        "copy",  # Copy the video stream without re-encoding
-        "-c:a",
-        "aac",  # Encode audio to AAC
-        "-b:a",
-        "128k",  # Set audio bitrate to 128k to maintain quality
-        "-y",
-        edited_video_path,
-    ]
-
     try:
-        subprocess.run(command, check=True)
-        logger.info(
-            f"Successfully added audio to video. Output saved to: {edited_video_path}"
+        generated_audio_output_path = tool_context.state.get("generated_audio_output_path")
+        logger.info(f"Audio path: {generated_audio_output_path}")
+        
+        video_url = tool_context.state.get("edited_video_url") or tool_context.state.get("video_url")
+        logger.info(f"Video URL: {video_url}")
+        
+        if not generated_audio_output_path or not os.path.exists(generated_audio_output_path):
+            logger.error(f"Audio file not found: {generated_audio_output_path}")
+            return {
+                "status": "error",
+                "response": "Audio file not found. Please generate audio first."
+            }
+        
+        result = video_editing_service.add_audio_overlay(
+            video_url=video_url,
+            audio_path=generated_audio_output_path,
+            start_offset=start_offset,
+            volume_overlay=volume_overlay,
+            volume_original=volume_original
         )
         
-        gcs_bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
-        gcs_blob_path = f"videos/{edited_video_name}"
-        gcs_blob = gcs_bucket.blob(gcs_blob_path)
-        
-        gcs_blob.upload_from_filename(edited_video_path)
-        gcs_blob.reload()
- 
-        video_gcs_url = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/{gcs_blob_path}"
-        logger.info(f"Edited video uploaded to GCS: {video_gcs_url}")
-        
-        tool_context.state["edited_video_url"] = video_gcs_url
-        
-        from multi_tool_agent.session_data import set_session_data
-        set_session_data("latest_video_url", video_gcs_url)
-        
-        return {
-            "status": "success",
-            "response": "The audio was successfully added to the video!",
-            "video_url": video_gcs_url,
-        }
-    except subprocess.CalledProcessError as ex:
-        logger.error(f"Error adding audio to video: {ex}")
-        logger.error(f"FFmpeg output: {ex.stderr.decode()}")
+        if result["status"] == "success":
+            tool_context.state["edited_video_url"] = result["video_url"]
+            
+            from multi_tool_agent.session_data import set_session_data
+            set_session_data("latest_video_url", {"url": result["video_url"]})
+            
+            return {
+                "status": "success",
+                "response": result["message"],
+                "video_url": result["video_url"],
+            }
+        else:
+            return result
+            
+    except Exception as ex:
+        logger.error(f"Error in add_audio_to_video_with_ffmpeg: {ex}")
         return {
             "status": "error",
-            "response": f"There was an error adding the audio to the video {ex}",
-        }
-    except FileNotFoundError as ex:
-        logger.error(
-            "FFmpeg command not found. Please ensure FFmpeg is installed and in your system's PATH."
-        )
-        return {
-            "status": "error",
-            "response": f"There was an error adding the audio to the video {ex}",
+            "response": f"There was an error adding the audio to the video: {ex}",
         }
 

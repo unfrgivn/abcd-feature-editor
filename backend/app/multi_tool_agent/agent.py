@@ -18,6 +18,7 @@ from google.adk.sessions import InMemorySessionService
 from google.cloud import storage
 from google.genai import types
 from services.bigquery.bigquery_service import bigquery_service
+from services.config_service import config_service
 
 from multi_tool_agent.add_text import add_text_to_video_with_ffmpeg
 from multi_tool_agent.generate_speech_tool import (
@@ -29,27 +30,14 @@ from .session_data import get_session_data, initialize_session_data, set_session
 
 load_dotenv()
 
-APP_NAME = "wpromote-codesprint-2025"
-USER_ID = "user1"
-SESSION_ID = "session1"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# TEST_FEATURE_ID = "a_supers_with_audio"
-CONFIG_PATH = Path(__file__).parent.parent / "config" / "config.json"
-
-UPLOADED_VIDEO_CACHE = {}
-
-
-def load_config():
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
-
-
-def get_feature_config(feature_id: str):
-    config = load_config()
-    for feature in config:
-        if feature.get("id") == feature_id:
-            return feature
-    return None
+APP_NAME = os.getenv("APP_NAME", "wpromote-codesprint-2025")
+USER_ID = os.getenv("DEFAULT_USER_ID", "user1")
+SESSION_ID = os.getenv("DEFAULT_SESSION_ID", "session1")
+GCS_SCRATCH_BUCKET = os.getenv("GCS_SCRATCH_BUCKET", "creative-audit-scratch-pad")
+GCS_FINAL_BUCKET = os.getenv("GCS_FINAL_BUCKET", "creative-audit-final-videos")
 
 
 def analyze_creative_performance_with_gemini(creative_uri: str) -> dict[str, str]:
@@ -237,8 +225,9 @@ def call_agent(query, feature_id=None):
     print("Current recommendations from session data: ", current_recommendations)
 
     if feature_id:
-        feature_config = get_feature_config(feature_id)
+        feature_config = config_service.get_feature_config(feature_id)
         if feature_config:
+            dynamic_instruction = generate_dynamic_instruction(feature_config)
             parts.append(
                 types.Part(
                     text=f"""
@@ -250,6 +239,8 @@ FEATURE CONTEXT:
 - Video URL: {feature_config.get("videoUrl")}
 - Brand Tone: {feature_config.get("brand_tone")}
 - Current Recommendations: {current_recommendations}
+
+{dynamic_instruction}
 
 USER QUERY: {query}
 """
@@ -277,34 +268,43 @@ USER QUERY: {query}
                     session_id=SESSION_ID
                 )
                 if session and hasattr(session, 'state'):
-                    print(f"DEBUG: Session state keys: {session.state.keys()}")
-                    print(f"DEBUG: Session state: {session.state}")
+                    print(f"DEBUG agent.py: Session state keys: {session.state.keys()}")
+                    print(f"DEBUG agent.py: Session state: {session.state}")
                     
                     has_audio = 'audio_urls' in session.state and session.state['audio_urls']
                     has_video = 'edited_video_url' in session.state and session.state['edited_video_url']
                     
-                    # If both audio and video are present, prefer video
+                    print(f"DEBUG agent.py: has_audio={has_audio}, has_video={has_video}")
+                    
                     if has_video:
                         media_assets['video_url'] = session.state['edited_video_url']
-                        print(f"DEBUG: Found video URL: {media_assets['video_url']}")
-                        session.state['edited_video_url'] = None
-                        # Clear audio URLs since we're showing video
+                        print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
+                        del session.state['edited_video_url']
+                        print(f"DEBUG agent.py: Deleted edited_video_url from session state")
                         if has_audio:
                             session.state['audio_urls'] = []
+                            print(f"DEBUG agent.py: Cleared audio_urls from session state")
                     elif has_audio:
-                        # Only show audio if no video was generated
                         media_assets['audio_urls'] = session.state['audio_urls']
-                        print(f"DEBUG: Found audio URLs: {media_assets['audio_urls']}")
+                        print(f"DEBUG agent.py: Setting audio_urls in media_assets: {media_assets['audio_urls']}")
                         session.state['audio_urls'] = []
+                        print(f"DEBUG agent.py: Cleared audio_urls from session state")
             except Exception as e:
-                print(f"Error getting session state: {e}")
+                print(f"ERROR agent.py: getting session state: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            print(f"DEBUG agent.py: Final media_assets: {media_assets}")
             
             if media_assets:
                 import json
-                return json.dumps({
+                response_obj = {
                     "text": resp,
                     "media": media_assets
-                })
+                }
+                print(f"DEBUG agent.py: Returning JSON: {response_obj}")
+                return json.dumps(response_obj)
+            print(f"DEBUG agent.py: Returning plain text response")
             return resp
 
     return None
@@ -318,7 +318,8 @@ async def init_agent(
     )
 
     feature_id = CURRENT_FEATURE_ID
-    feature_config = get_feature_config(feature_id)
+    feature_config = config_service.get_feature_config(feature_id)
+    
     if feature_config and feature_config.get("videoUrl"):
         video_url = feature_config["videoUrl"]
         print(f"Video URL: {video_url}")
@@ -390,21 +391,8 @@ async def init_agent(
     return None
 
 
-def create_agent():
-    tools = [
-        set_supers_audio_recommendation,
-        set_supers_text_recommendations,
-        get_current_recommendations,
-        generate_speech_from_text,
-        add_text_to_video_with_ffmpeg,
-        add_audio_to_video_with_ffmpeg,
-    ]
-
-    name = "ai_editor_agent"
-
-    description = """"""  ## TODO!!!
-
-    instruction = """
+def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
+    base_instruction = """
     You are an AI editor agent specialized in video content analysis and editing recommendations.
     
     Your task is to assist users in editing video content based on the provided feature descriptions and video analysis.
@@ -415,7 +403,111 @@ def create_agent():
     - Detection Status: Whether this feature is currently detected in the video
     - LLM Explanation: Previous analysis or explanation about this feature
     - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
+    """
+    
+    if feature_config:
+        feature_id = feature_config.get("id", "")
+        brand_tone = feature_config.get("brand_tone", "professional and engaging")
+        primary_color = feature_config.get("primary_brand_color", "#5db1bd")
+        secondary_color = feature_config.get("secondary_brand_color", "#313e48")
+        
+        if "supers_with_audio" in feature_id:
+            workflow_instruction = f"""
+    FEATURE TYPE: Supers with Audio (Text overlays + Voiceover)
+    BRAND TONE: {brand_tone}
+    BRAND COLORS: Primary: {primary_color}, Secondary: {secondary_color}
 
+    WORKFLOW FOR INITIAL RECOMMENDATIONS:
+    1. If there are no `Current Recommendations` OR if the user requests initial recommendations:
+       a) Call `set_supers_audio_recommendation` tool with voiceover message and timing
+       
+       b) IMMEDIATELY generate the actual media:
+          * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
+          * Then ask the user to review the audio preview
+          * Ask if they want to generate the video with this voiceover
+          * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+       
+       c) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER EDITS:
+    When a user requests changes to audio:
+    - Use `generate_speech_from_text` to create the audio file preview
+    - Ask the user to review the audio
+    - Ask if they want to generate the video with this voiceover
+    - WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+    
+    VOICEOVER COPY RULES:
+    - Voiceover copy MUST be 1-2 sentences maximum
+    - Keep it concise, punchy, and impactful
+    - Match the brand tone: {brand_tone}
+    - Never generate voiceover copy longer than 2 sentences
+    """
+        elif "supers" in feature_id and "audio" not in feature_id:
+            workflow_instruction = f"""
+    FEATURE TYPE: Supers (Text overlays only)
+    BRAND TONE: {brand_tone}
+    BRAND COLORS: Primary: {primary_color}, Secondary: {secondary_color}
+
+    WORKFLOW FOR INITIAL RECOMMENDATIONS:
+    1. If there are no `Current Recommendations` OR if the user requests initial recommendations:
+       a) Call `set_supers_text_recommendations` tool with text message and timing
+       
+       b) IMMEDIATELY generate the actual media:
+          * ALWAYS call `add_text_to_video_with_ffmpeg` to create the video with text overlay
+       
+       c) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER EDITS:
+    When a user requests changes to text overlays:
+    - Use `add_text_to_video_with_ffmpeg` to create the video with text
+    - Don't just describe what you would do - actually call the tool to generate the file
+    
+    TEXT OVERLAY RULES:
+    - Keep text short and impactful
+    - Match the brand tone: {brand_tone}
+    - Use brand colors when applicable: Primary: {primary_color}, Secondary: {secondary_color}
+    """
+        elif "voice_and_tone" in feature_id or "tone" in feature_id:
+            workflow_instruction = f"""
+    FEATURE TYPE: Voice and Tone Analysis
+    BRAND TONE: {brand_tone}
+
+    WORKFLOW FOR INITIAL RECOMMENDATIONS:
+    1. If there are no `Current Recommendations` OR if the user requests initial recommendations:
+       a) Call `set_supers_audio_recommendation` tool with voiceover message that matches the brand tone
+       
+       b) IMMEDIATELY generate the actual media:
+          * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
+          * Then ask the user to review the audio preview
+          * Ask if they want to generate the video with this voiceover
+          * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+       
+       c) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER EDITS:
+    When a user requests changes to voiceover:
+    - Use `generate_speech_from_text` to create the audio file preview
+    - Ask the user to review the audio
+    - Ask if they want to generate the video with this voiceover
+    - WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+    
+    VOICEOVER COPY RULES:
+    - Voiceover copy MUST be 1-2 sentences maximum
+    - Keep it concise, punchy, and impactful
+    - CRITICAL: Match the brand tone precisely: {brand_tone}
+    - Never generate voiceover copy longer than 2 sentences
+    """
+        else:
+            workflow_instruction = """
+    FEATURE TYPE: General Video Editing
+    
+    WORKFLOW:
+    - Analyze the video based on the feature description
+    - Provide recommendations based on best practices
+    - Use available tools to generate previews when requested
+    """
+    else:
+        workflow_instruction = """
     WORKFLOW FOR INITIAL RECOMMENDATIONS:
     1. If there are no `Current Recommendations` OR if the user requests initial recommendations:
        a) Determine feature type from Feature Name:
@@ -450,9 +542,30 @@ def create_agent():
     - Voiceover copy MUST be 1-2 sentences maximum
     - Keep it concise, punchy, and impactful
     - Never generate voiceover copy longer than 2 sentences
+    """
     
+    footer = """
     IMPORTANT: When you generate audio files or videos using the tools, DO NOT include the file URLs (like https://storage.googleapis.com/...) in your text response. The generated media will automatically appear as playable previews below your message. Only describe what you've created in natural language.
     """
+    
+    return base_instruction + workflow_instruction + footer
+
+
+def create_agent():
+    tools = [
+        set_supers_audio_recommendation,
+        set_supers_text_recommendations,
+        get_current_recommendations,
+        generate_speech_from_text,
+        add_text_to_video_with_ffmpeg,
+        add_audio_to_video_with_ffmpeg,
+    ]
+
+    name = "ai_editor_agent"
+
+    description = """"""
+
+    instruction = generate_dynamic_instruction()
 
     agent = LlmAgent(
         model=os.environ["MODEL_NAME"],

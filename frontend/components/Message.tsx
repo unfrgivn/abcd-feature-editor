@@ -2,6 +2,7 @@ import React from 'react';
 import { Message as MessageType, Role } from '../types';
 import { BotIcon } from './icons/BotIcon';
 import { UserIcon } from './icons/UserIcon';
+import ResponsiveVideoPlayer from './ResponsiveVideoPlayer';
 
 interface MessageProps {
   message: MessageType;
@@ -63,10 +64,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
           {message.media?.video_url && (
             <div className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm">
               <p className="text-xs font-medium text-gray-600 uppercase mb-3">Edited Video</p>
-              <video controls className="w-full rounded-lg">
-                <source src={message.media.video_url} type="video/mp4" />
-                Your browser does not support the video tag.
-              </video>
+              <ResponsiveVideoPlayer url={message.media.video_url} />
             </div>
           )}
         </div>

@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import ChatWindow from './components/ChatWindow';
 import FeaturesTable from './components/FeaturesTable';
-import { Feature } from './types';
+import SessionList from './components/SessionList';
+import { Feature, Session } from './types';
+import * as sessionService from './services/sessionService';
 
 
 function App() {
@@ -10,6 +12,9 @@ function App() {
   const [features, setFeatures] = useState<Feature[]>([]);
   const [editingFeature, setEditingFeature] = useState<Feature | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [currentSession, setCurrentSession] = useState<Session | null>(null);
+  const userId = 'demo-user';
 
   useEffect(() => {
     const fetchFeatures = async () => {
@@ -19,7 +24,6 @@ function App() {
         setFeatures(response.data);
       } catch (error) {
         console.error('Error fetching features:', error);
-        // Fallback to initial features if API fails
       } finally {
         setLoading(false);
       }
@@ -28,19 +32,100 @@ function App() {
     fetchFeatures();
   }, []);
 
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const sessionsList = await sessionService.listSessions(userId);
+        setSessions(sessionsList);
+      } catch (error) {
+        console.error('Error fetching sessions:', error);
+      }
+    };
+
+    fetchSessions();
+  }, [userId]);
+
   const handleStartEdit = async (feature: Feature) => {
     try {
       await axios.post('http://127.0.0.1:8000/api/cleanup');
       console.log('Session cleaned up successfully');
+      
+      const sessionId = `session-${Date.now()}`;
+      const result = await sessionService.createSession(
+        userId,
+        sessionId,
+        feature.videoId,
+        feature.videoUrl,
+        feature.id
+      );
+      
+      const newSession = await sessionService.getSession(userId, sessionId);
+      setCurrentSession(newSession);
+      setSessions(prev => [newSession, ...prev]);
+      
     } catch (error) {
-      console.error('Error cleaning up session:', error);
+      console.error('Error creating session:', error);
     }
     
     setEditingFeature(feature);
     setView('chat');
   };
 
+  const handleSessionSelect = async (session: Session) => {
+    try {
+      const feature = features.find(f => f.id === session.feature_id);
+      if (feature) {
+        setCurrentSession(session);
+        setEditingFeature(feature);
+        setView('chat');
+      }
+    } catch (error) {
+      console.error('Error selecting session:', error);
+    }
+  };
+
+  const handleSessionDelete = async (sessionId: string) => {
+    try {
+      if (currentSession?.session_id === sessionId) {
+        await axios.post('http://127.0.0.1:8000/api/cleanup');
+        console.log('Active session cleaned up before deletion');
+      }
+      
+      await sessionService.deleteSession(userId, sessionId);
+      setSessions(prev => prev.filter(s => s.session_id !== sessionId));
+      
+      if (currentSession?.session_id === sessionId) {
+        setCurrentSession(null);
+        setEditingFeature(null);
+        setView('table');
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+    }
+  };
+
+  const handleSessionRename = async (sessionId: string, newName: string) => {
+    try {
+      await sessionService.renameSession(userId, sessionId, newName);
+      setSessions(prev =>
+        prev.map(s => (s.session_id === sessionId ? { ...s, feature_id: newName } : s))
+      );
+      if (currentSession?.session_id === sessionId) {
+        setCurrentSession(prev => prev ? { ...prev, feature_id: newName } : null);
+      }
+    } catch (error) {
+      console.error('Error renaming session:', error);
+    }
+  };
+
+  const handleNewSession = () => {
+    setCurrentSession(null);
+    setEditingFeature(null);
+    setView('table');
+  };
+
   const handleCloseChat = () => {
+    setCurrentSession(null);
     setEditingFeature(null);
     setView('table');
   };
@@ -57,6 +142,14 @@ function App() {
 
   return (
     <div className="flex h-screen bg-white text-gray-900">
+      <SessionList
+        sessions={sessions}
+        currentSessionId={currentSession?.session_id || null}
+        onSessionSelect={handleSessionSelect}
+        onSessionDelete={handleSessionDelete}
+        onSessionRename={handleSessionRename}
+        onNewSession={handleNewSession}
+      />
       <aside className="w-16 bg-[#1a2b52] flex flex-col items-center py-4 space-y-6">
         <div className="w-10 h-10 bg-[#4a9eff] rounded-lg flex items-center justify-center text-white font-bold text-xl">
           IQ
@@ -136,7 +229,12 @@ function App() {
               />
             </div>
           ) : (
-            <ChatWindow featureToEdit={editingFeature} onClose={handleCloseChat} />
+            <ChatWindow 
+              featureToEdit={editingFeature} 
+              onClose={handleCloseChat} 
+              currentSession={currentSession}
+              userId={userId}
+            />
           )}
         </main>
       </div>

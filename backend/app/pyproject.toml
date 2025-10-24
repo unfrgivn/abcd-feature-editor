@@ -18,3 +18,10 @@ dependencies = [
   "moviepy>=2.2.1",
   "google-cloud-texttospeech>=2.32.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-mock>=3.15.1",
+]

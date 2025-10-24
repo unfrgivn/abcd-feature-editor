@@ -6,6 +6,9 @@ from starlette.middleware.cors import CORSMiddleware
 
 from api.router import api_router
 from core.config import settings
+from core.env_validation import validate_environment_or_exit
+
+validate_environment_or_exit()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
