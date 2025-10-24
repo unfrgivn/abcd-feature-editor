@@ -210,7 +210,10 @@ async def add_text_to_video_with_ffmpeg(
             break
     
     brand_color_hex = primary_brand_color.lstrip("#")
-    bg_color = f"0x{brand_color_hex}@0.8"
+    
+    # For drawtext boxcolor, use RRGGBBAA format (alpha in hex: 0.8 * 255 = CC)
+    alpha_hex = format(int(0.8 * 255), '02X')
+    text_bg_color = f"0x{brand_color_hex}{alpha_hex}"
 
     # TODO: Replace with video from context once working
     if video_url.startswith("gs://"):
@@ -236,28 +239,95 @@ async def add_text_to_video_with_ffmpeg(
             return f"Error: Input video file not found at {input_video_path}"
 
         try:
+            # Get video dimensions first
+            probe_command = [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "csv=p=0",
+                input_video_path
+            ]
+            
+            probe_result = subprocess.run(probe_command, capture_output=True, text=True, check=True)
+            video_width, video_height = map(int, probe_result.stdout.strip().split(','))
+            logger.info(f"Video dimensions: {video_width}x{video_height}")
+            
+            # Calculate max text width (80% of video width for margins)
+            max_text_width = int(video_width * 0.8)
+            
+            # Better character width estimation based on Arial font metrics
+            # Arial average character width is approximately 0.5-0.6 of font size
+            avg_char_width = fontsize * 0.55
+            max_chars_per_line = int(max_text_width / avg_char_width)
+            
+            # Word wrapping algorithm
+            words = text.split()
+            lines = []
+            current_line = []
+            
+            for word in words:
+                test_line = current_line + [word]
+                test_text = ' '.join(test_line)
+                
+                # Estimate if this line would be too long
+                if len(test_text) <= max_chars_per_line:
+                    current_line.append(word)
+                else:
+                    # Line would be too long, save current line and start new one
+                    if current_line:
+                        lines.append(' '.join(current_line))
+                        current_line = [word]
+                    else:
+                        # Single word is too long, add it anyway
+                        lines.append(word)
+                        current_line = []
+            
+            # Add remaining words
+            if current_line:
+                lines.append(' '.join(current_line))
+            
+            logger.info(f"Wrapped text into {len(lines)} lines, max width: {max_text_width}px")
+            
+            # Create a temporary text file for FFmpeg to read from
+            # This is more reliable than escaping newlines in the command line
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as text_file:
+                text_file.write('\n'.join(lines))
+                text_file_path = text_file.name
+            
+            logger.info(f"Created text file: {text_file_path}")
+            logger.info(f"Text content:\n{chr(10).join(lines)}")
+            
+            # Position calculations
             x = "(w-text_w)/2"
             y = ""
             match position:
                 case "top":
-                    y = "text_h+10"
+                    y = "30"
                 case "center":
-                    y = "(h-text_h-10)/2"
+                    y = "(h-text_h)/2"
                 case "bottom":
-                    y = "h-text_h-10"
+                    y = "h-text_h-30"
                 case _:
-                    y = "(h-text_h-10)/2"
+                    y = "(h-text_h)/2"
+            
+            logger.info(f"Text color: {color}, Box color: {text_bg_color}")
+            
+            # Use drawtext with textfile for proper multi-line support
+            # The box will automatically size to fit the text
             ffmpeg_command = [
                 "ffmpeg",
-                "-y",  # Overwrite output file without asking
+                "-y",
                 "-i",
                 input_video_path,
                 "-vf",
-                f"drawtext=font='Arial':text='{text}':enable='between(t,{start_time},{start_time + duration})':box=1:boxcolor={bg_color}:boxborderw=20:fontcolor={color}:fontsize={fontsize}:x={x}:y={y}",
+                f"drawtext=fontfile=/System/Library/Fonts/Supplemental/Arial.ttf:textfile={text_file_path}:fontcolor={color}:fontsize={fontsize}:x=(w-text_w)/2:y={y}:box=1:boxcolor={text_bg_color}:boxborderw=20:line_spacing=10:enable='between(t,{start_time},{start_time + duration})'",
                 "-c:a",
-                "copy",  # Copy audio without re-encoding
+                "copy",
                 output_video_path,
             ]
+            
+            logger.info(f"FFmpeg command: {' '.join(ffmpeg_command)}")
 
             try:
                 subprocess.run(ffmpeg_command, check=True)
@@ -284,17 +354,33 @@ async def add_text_to_video_with_ffmpeg(
                 tool_context.state["edited_video_url"] = video_gcs_url
                 
                 from multi_tool_agent.session_data import set_session_data
-                set_session_data("latest_video_url", video_gcs_url)
+                set_session_data("latest_video_url", {"url": video_gcs_url})
+                
+                # Clean up temporary text file
+                try:
+                    os.unlink(text_file_path)
+                except Exception as cleanup_error:
+                    logger.warning(f"Could not delete temp text file: {cleanup_error}")
                 
                 return "Text successfully added to video! The edited video is ready."
                 
             except subprocess.CalledProcessError as e:
                 logger.error(f"Error during FFmpeg execution: {e}")
+                # Clean up temp file on error
+                try:
+                    os.unlink(text_file_path)
+                except:
+                    pass
                 return f"Error adding text to video: {str(e)}"
             except FileNotFoundError:
                 logger.error(
                     "FFmpeg not found. Please ensure FFmpeg is installed and in your system's PATH."
                 )
+                # Clean up temp file on error
+                try:
+                    os.unlink(text_file_path)
+                except:
+                    pass
                 return "Error: FFmpeg not found. Please ensure FFmpeg is installed."
 
         except Exception as e:
