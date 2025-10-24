@@ -41,14 +41,14 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
         onChange={(e) => setInputText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Type your message here..."
-        className="flex-1 bg-slate-800 border border-slate-600 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-48"
+        className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none max-h-48 text-gray-900 placeholder-gray-400"
         rows={1}
         disabled={isLoading}
       />
       <button
         type="submit"
         disabled={isLoading || !inputText.trim()}
-        className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-3 h-12 w-12 flex items-center justify-center disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed hover:from-blue-600 hover:to-blue-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#131316]"
+        className="bg-[#1a2b52] text-white rounded-lg p-3 h-12 w-12 flex items-center justify-center disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-[#152241] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex-shrink-0"
       >
         <SendIcon />
       </button>

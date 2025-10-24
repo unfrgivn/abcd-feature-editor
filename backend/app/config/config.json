@@ -1,35 +1,46 @@
 [
   {
     "id": "a_supers",
-    "name": "Supers",
+    "name": "IEC Video (Funny tone)",
     "category": "Attract",
-    "description": "Any supers (text overlays) have been incorporated at any time in the video.",
+    "description": "The speech heard in the audio of the video matches OR is contextually supportive of the overlaid text shown on screen.",
     "detected": false,
-    "llmExplanation": "Feature not detected...",
+    "llmExplanation": "The video contains multiple overlaid text elements (supers) throughout its duration, such as 'Why wait 4 years to start your future when you could be working in as few as 10 months? 🤔' (0:00-0:03), 'Train at UEI to become a Medical Assistant' (0:03-0:05), 'Graduate in as little as 10 months' (0:05-0:07), and 'Enroll today and fast-track to a rewarding career' (0:13-0:15). However, the audio track consists solely of background music and does not contain any spoken words or speech. Therefore, there is no speech to match or contextually support the overlaid text.",
     "isFixed": false,
     "videoId": "VID-AUTH-101",
-    "videoUrl": "https://www.youtube.com/watch?v=j444CiUhIAs"
+    "videoUrl": "gs://bkt-plrs-prd-creative-audit-vizf/C39258910/videos/Why%20Wait%204%20Years%20_%20MA%20_%20Primer%20_%20Video%20_%20UEI-480_6usl9Qad.mp4",
+    "primary_brand_color": "#FF33CC",
+    "secondary_brand_color": "#FF9933",
+    "brand_tone": "Our brand tone is utterly ridiculous and hilariously self-aware, transforming every interaction into a joke-filled adventure. We prioritize fun above all else, ensuring that learning with us is always a sidesplitting, pun-laden experience where nothing is taken too seriously."
   },
   {
     "id": "a_supers_with_audio",
-    "name": "Supers with Audio",
+    "name": "IEC Video without Supers Audio",
     "category": "Attract",
     "description": "The speech heard in the audio of the video matches OR is contextually supportive of the overlaid text shown on screen.",
     "detected": false,
     "llmExplanation": "The video does not have any audio supers that describe the content of the video.",
     "isFixed": false,
     "videoId": "VID-CHAT-201",
-    "videoUrl": "gs://bkt-plrs-prd-creative-audit-vizf/C39258910/videos/BDQs_Feeling%20Stuck_Primer_ET_UEI-329_9x16%20%281%29.mp4"
+    "videoUrl": "gs://bkt-plrs-prd-creative-audit-vizf/C39258910/videos/BDQs_Feeling%20Stuck_Primer_ET_UEI-329_9x16%20%281%29.mp4",
+    "primary_brand_color": "#5db1bd",
+    "secondary_brand_color": "#313e48",
+    "brand_tone": "The brand's tone is professional, empowering, and supportive, emphasizing student transformation and success through authentic, hands-on, and engaging learning experiences. It strives to be credible, cohesive, and inclusive, reflecting a positive and energetic environment focused on practical outcomes."
   },
   {
-    "id": "keyboard_cat_supers",
-    "name": "Supers with Audio",
+    "id": "a_voice_and_tone",
+    "name": "Puffer Jacket (no supers)",
     "category": "Attract",
-    "description": "The speech heard in the audio of the video matches OR is contextually supportive of the overlaid text shown on screen.",
+    "description": "The speech heard in the audio of the video matches the brand's voice and tone guidelines.",
     "detected": false,
-    "llmExplanation": "The video does not have any audio supers that describe the content of the video.",
+    "llmExplanation": "The video's audio",
     "isFixed": false,
-    "videoId": "VID-CHAT-301",
-    "videoUrl": "https://www.youtube.com/watch?v=J---aiyznGQ"
+    "videoId": "VID-CHAT-201",
+    "videoUrl": "https://storage.googleapis.com/bkt-plrs-prd-creative-audit-vizf/C61558829/videos/Video_VI56s_SuperPuffInfluencers.Becky_Aritzia_SuperPuffInfluencers.Becky_WI24_BAU_Neutral_IC_SuperPuffLP_US_CA_1.31",
+    "primary_brand_color": "#000000",
+    "secondary_brand_color": "#313e48",
+    "brand_tone": "The brand's tone caters to millenials who enjoy athleisure."
   }
 ]
+
+

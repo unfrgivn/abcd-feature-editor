@@ -37,3 +37,7 @@ Thumbs.db
 
 .env
 .venv
+
+
+*.mp4
+*.mp3

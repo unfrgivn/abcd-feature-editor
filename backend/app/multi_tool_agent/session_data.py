@@ -44,3 +44,23 @@ def get_session_data(key: str) -> Dict[str, Any]:
     if session and key in session.state:
         return session.state[key]
     return ''
+
+
+def clear_session_state() -> Dict[str, str]:
+    """
+    Clear all session state data.
+    
+    Returns:
+        Dictionary with status message
+    """
+    session = session_service.get_session_sync(
+        app_name=APP_NAME, 
+        user_id=USER_ID, 
+        session_id=SESSION_ID
+    )
+    
+    if session:
+        session.state.clear()
+        return {"status": "success", "message": "Session state cleared"}
+    
+    return {"status": "error", "message": "Session not found"}

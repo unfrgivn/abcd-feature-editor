@@ -17,10 +17,13 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.cloud import storage
 from google.genai import types
-
-from multi_tool_agent.add_text import add_text_to_video
-from multi_tool_agent.generate_speech_tool import generate_speech_from_text
 from services.bigquery.bigquery_service import bigquery_service
+
+from multi_tool_agent.add_text import add_text_to_video_with_ffmpeg
+from multi_tool_agent.generate_speech_tool import (
+    add_audio_to_video_with_ffmpeg,
+    generate_speech_from_text,
+)
 
 from .session_data import get_session_data, initialize_session_data, set_session_data
 
@@ -30,7 +33,7 @@ APP_NAME = "wpromote-codesprint-2025"
 USER_ID = "user1"
 SESSION_ID = "session1"
 
-TEST_FEATURE_ID = "a_supers_with_audio"
+# TEST_FEATURE_ID = "a_supers_with_audio"
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "config.json"
 
 UPLOADED_VIDEO_CACHE = {}
@@ -226,7 +229,7 @@ CURRENT_FEATURE_ID = None
 def call_agent(query, feature_id=None):
     """"""
     global CURRENT_FEATURE_ID
-    CURRENT_FEATURE_ID = feature_id or TEST_FEATURE_ID
+    CURRENT_FEATURE_ID = feature_id
 
     parts = [types.Part(text=query)]
 
@@ -245,22 +248,13 @@ FEATURE CONTEXT:
 - Currently Detected: {feature_config.get("detected")}
 - LLM Explanation: {feature_config.get("llmExplanation")}
 - Video URL: {feature_config.get("videoUrl")}
+- Brand Tone: {feature_config.get("brand_tone")}
 - Current Recommendations: {current_recommendations}
 
 USER QUERY: {query}
 """
                 )
             )
-            # video_url = feature_config.get("videoUrl")
-            # if video_url:
-            #     print(f"Adding video context from {video_url} for feature {feature_id}")
-            #     video_part = types.Part.from_uri(
-            #         file_uri=video_url,
-            #         mime_type="video/*",
-            #     )
-            #     parts.append(video_part)
-            # else:
-            #     print(f"No videoUrl found for feature {feature_id}")
         else:
             print(f"Feature config not found for id: {feature_id}")
 
@@ -270,9 +264,47 @@ USER QUERY: {query}
         user_id=USER_ID, session_id=SESSION_ID, new_message=content
     )
     print("Processing agent responses...")
+    
+    media_assets = {}
     for event in events:
         if event.is_final_response() and event.content:
             resp = event.content.parts[0].text.strip()
+            
+            try:
+                session = AGENT_RUNNER.session_service.get_session_sync(
+                    app_name=APP_NAME, 
+                    user_id=USER_ID, 
+                    session_id=SESSION_ID
+                )
+                if session and hasattr(session, 'state'):
+                    print(f"DEBUG: Session state keys: {session.state.keys()}")
+                    print(f"DEBUG: Session state: {session.state}")
+                    
+                    has_audio = 'audio_urls' in session.state and session.state['audio_urls']
+                    has_video = 'edited_video_url' in session.state and session.state['edited_video_url']
+                    
+                    # If both audio and video are present, prefer video
+                    if has_video:
+                        media_assets['video_url'] = session.state['edited_video_url']
+                        print(f"DEBUG: Found video URL: {media_assets['video_url']}")
+                        session.state['edited_video_url'] = None
+                        # Clear audio URLs since we're showing video
+                        if has_audio:
+                            session.state['audio_urls'] = []
+                    elif has_audio:
+                        # Only show audio if no video was generated
+                        media_assets['audio_urls'] = session.state['audio_urls']
+                        print(f"DEBUG: Found audio URLs: {media_assets['audio_urls']}")
+                        session.state['audio_urls'] = []
+            except Exception as e:
+                print(f"Error getting session state: {e}")
+            
+            if media_assets:
+                import json
+                return json.dumps({
+                    "text": resp,
+                    "media": media_assets
+                })
             return resp
 
     return None
@@ -285,7 +317,7 @@ async def init_agent(
         f"Callback running before model call for agent: {callback_context.agent_name}"
     )
 
-    feature_id = CURRENT_FEATURE_ID or TEST_FEATURE_ID
+    feature_id = CURRENT_FEATURE_ID
     feature_config = get_feature_config(feature_id)
     if feature_config and feature_config.get("videoUrl"):
         video_url = feature_config["videoUrl"]
@@ -364,7 +396,8 @@ def create_agent():
         set_supers_text_recommendations,
         get_current_recommendations,
         generate_speech_from_text,
-        add_text_to_video,
+        add_text_to_video_with_ffmpeg,
+        add_audio_to_video_with_ffmpeg,
     ]
 
     name = "ai_editor_agent"
@@ -383,11 +416,42 @@ def create_agent():
     - LLM Explanation: Previous analysis or explanation about this feature
     - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
 
-    If the user is not pleased with the `Current Recommendations` or if there are no `Current Recommendations`,
-    pass recommendations to the `set_supers_audio_recommendation` OR `set_supers_text_recommendations` tool. 
-    Never use both tools.
-
-    Finally, use the get_current_recommendations tool to retrieve the latest recommendations and describe them to the user.
+    WORKFLOW FOR INITIAL RECOMMENDATIONS:
+    1. If there are no `Current Recommendations` OR if the user requests initial recommendations:
+       a) Determine feature type from Feature Name:
+          - If Feature Name contains "with Audio" → This is a Supers with Audio feature
+          - Otherwise → This is a text-only Supers feature
+       
+       b) Set recommendations:
+          - For Supers with Audio: Call `set_supers_audio_recommendation` tool
+          - For text-only Supers: Call `set_supers_text_recommendations` tool
+       
+       c) IMMEDIATELY generate the actual media:
+          - For Supers with Audio: 
+            * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
+            * Then ask the user to review the audio preview
+            * Ask if they want to generate the video with this voiceover
+            * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+          - For text-only Supers: ALWAYS call `add_text_to_video_with_ffmpeg` to create the video with text overlay
+       
+       d) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER EDITS:
+    When a user requests changes to audio or text:
+    - For audio changes: 
+      * Use `generate_speech_from_text` to create the audio file preview
+      * Ask the user to review the audio
+      * Ask if they want to generate the video with this voiceover
+      * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+    - For text overlay changes: Use `add_text_to_video_with_ffmpeg` to create the video with text
+    - Don't just describe what you would do - actually call the tool to generate the file
+    
+    VOICEOVER COPY RULES:
+    - Voiceover copy MUST be 1-2 sentences maximum
+    - Keep it concise, punchy, and impactful
+    - Never generate voiceover copy longer than 2 sentences
+    
+    IMPORTANT: When you generate audio files or videos using the tools, DO NOT include the file URLs (like https://storage.googleapis.com/...) in your text response. The generated media will automatically appear as playable previews below your message. Only describe what you've created in natural language.
     """
 
     agent = LlmAgent(
