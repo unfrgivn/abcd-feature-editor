@@ -18,6 +18,7 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
   const isPending = !isUser && recommendation?.status === RecommendationStatus.PENDING;
   const isProcessing = !isUser && recommendation?.status === RecommendationStatus.PROCESSING;
   const isAccepted = !isUser && recommendation?.status === RecommendationStatus.ACCEPTED;
+  const isRejected = !isUser && recommendation?.status === RecommendationStatus.REJECTED;
 
   const containerClasses = isUser ? 'flex justify-end' : 'flex justify-start';
   
@@ -31,6 +32,8 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
     bubbleClasses = 'bg-amber-50 border border-amber-200 text-gray-900 rounded-2xl shadow-sm';
   } else if (isAccepted) {
     bubbleClasses = 'bg-green-50 border border-green-300 text-gray-900 rounded-2xl shadow-sm';
+  } else if (isRejected) {
+    bubbleClasses = 'bg-red-50 border border-red-200 text-gray-900 rounded-2xl shadow-sm';
   }
   
   const icon = isUser ? <UserIcon /> : <BotIcon />;
@@ -77,14 +80,20 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
                   <span className="text-xs font-semibold text-green-700 uppercase">Applied Change</span>
                 </div>
               )}
+              {isRejected && (
+                <div className="flex items-center space-x-2 mb-2">
+                  <XIcon />
+                  <span className="text-xs font-semibold text-red-700 uppercase">Rejected</span>
+                </div>
+              )}
               <p className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={formatText(message.text)}></p>
-              {recommendation?.audioUrls && recommendation.audioUrls.length > 0 && (
+              {recommendation?.audioUrls && recommendation.audioUrls.length > 0 && (isPending || isProcessing) && (
                 <div className="mt-3 space-y-2 pt-3 border-t border-blue-300">
                   <p className="text-xs font-medium text-gray-600 uppercase">Audio Preview</p>
                   {recommendation.audioUrls.map((audioUrl, index) => (
                     <div key={index}>
-                      <p className="text-xs text-gray-500 mb-1">Audio {index + 1}</p>
-                      <audio controls className="w-full">
+                      <p className="text-xs text-gray-500 mb-1">Option {index + 1}</p>
+                      <audio controls className="w-full h-10">
                         <source src={audioUrl} type="audio/mpeg" />
                         Your browser does not support the audio element.
                       </audio>

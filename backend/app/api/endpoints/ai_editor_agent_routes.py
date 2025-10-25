@@ -37,17 +37,28 @@ async def call_ai_editor_agent(userQuery: UserQuery):
     try:
         import json
 
-        print("Calling agent...")
+        print(f"Calling agent with query: {userQuery.query}")
         response = agent.call_agent(userQuery.query, userQuery.feature_id)
+        print(f"Agent returned response type: {type(response)}, value: {repr(response)}")
+        
+        if not response:
+            logging.warning("Agent returned empty or None response")
+            return Response(
+                content=json.dumps({"text": "I apologize, but I encountered an issue processing your request. Could you please try rephrasing or providing more details?", "media": {}}),
+                media_type="application/json",
+                status_code=200
+            )
         
         try:
             json_data = json.loads(response)
             return Response(content=response, media_type="application/json", status_code=200)
         except (json.JSONDecodeError, TypeError):
-            return Response(content=response or "", status_code=200)
+            return Response(content=response, status_code=200)
             
     except Exception as ex:
         logging.error("AI Editor Agent - ERROR:  %s", str(ex))
+        import traceback
+        traceback.print_exc()
 
         return Response(
             content=f"ERROR: {ex}. Please try again.",

@@ -145,15 +145,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
         const isQuestion = data.text.trim().endsWith('?');
         const shouldCreateRecommendation = hasMedia || isQuestion;
         
+        console.log('DEBUG: shouldCreateRecommendation:', shouldCreateRecommendation);
+        console.log('DEBUG: hasMedia:', hasMedia, 'isQuestion:', isQuestion);
+        console.log('DEBUG: Full data object:', JSON.stringify(data, null, 2));
+        
         if (shouldCreateRecommendation) {
           console.log('DEBUG: Found media or question in response');
           console.log('DEBUG: applyingRecommendationIdRef.current:', applyingRecommendationIdRef.current);
           console.log('DEBUG: video_url:', data.media?.video_url);
           console.log('DEBUG: audio_urls:', data.media?.audio_urls);
           console.log('DEBUG: isQuestion:', isQuestion);
+          console.log('DEBUG: hasMedia:', hasMedia);
           
           if (applyingRecommendationIdRef.current && hasMedia) {
+            console.log('DEBUG: ===== ENTERING UPDATE EXISTING RECOMMENDATION BLOCK =====');
             console.log('DEBUG: Updating existing recommendation:', applyingRecommendationIdRef.current);
+            console.log('DEBUG: currentSession:', currentSession);
+            console.log('DEBUG: data.media.video_url:', data.media.video_url);
+            
             const recId = applyingRecommendationIdRef.current;
             setRecommendations(prev => 
               prev.map(rec => 
@@ -162,48 +171,68 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                   : rec
               )
             );
-            setApplyingRecommendationId(null);
-            applyingRecommendationIdRef.current = null;
+            
+            if (data.media.video_url) {
+              setApplyingRecommendationId(null);
+              applyingRecommendationIdRef.current = null;
+            }
+            
+            console.log('DEBUG: About to check video history condition');
+            console.log('DEBUG: currentSession exists:', !!currentSession);
+            console.log('DEBUG: data.media.video_url exists:', !!data.media.video_url);
             
             if (currentSession && data.media.video_url) {
+              console.log('DEBUG: ===== ADDING TO VIDEO HISTORY =====');
               try {
                 await sessionService.createVersion(currentSession.pk, data.media.video_url);
                 console.log('DEBUG: Version snapshot created for applied recommendation');
-                setVideoHistory(prev => [...prev, data.media.video_url]);
-                setCurrentVideoIndex(prev => prev + 1);
-                setIsProcessingRecommendation(false);
+                console.log('DEBUG: Adding video to history:', data.media.video_url);
+                setVideoHistory(prev => {
+                  console.log('DEBUG: Previous history:', prev);
+                  const newHistory = [...prev, data.media.video_url];
+                  console.log('DEBUG: New history:', newHistory);
+                  return newHistory;
+                });
+                setCurrentVideoIndex(prev => {
+                  console.log('DEBUG: Previous index:', prev);
+                  const newIndex = prev + 1;
+                  console.log('DEBUG: New index:', newIndex);
+                  return newIndex;
+                });
               } catch (error) {
                 console.error('Error creating version snapshot:', error);
-                setIsProcessingRecommendation(false);
               }
+            } else {
+              console.log('DEBUG: ===== NOT ADDING TO VIDEO HISTORY =====');
+              console.log('DEBUG: Reason - currentSession:', currentSession, 'video_url:', data.media.video_url);
             }
+            setIsProcessingRecommendation(false);
           } else {
             console.log('DEBUG: Creating new recommendation');
-            setMessages(prev => {
-              const messageIndex = prev.filter(msg => msg.text !== INITIAL_MESSAGE).length - 1;
-              const newRec: Recommendation = {
-                id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: data.media?.video_url ? 'Video Edit Recommendation' : (data.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
-                description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
-                status: RecommendationStatus.PENDING,
-                videoUrl: data.media?.video_url,
-                audioUrls: data.media?.audio_urls,
-                messageIndex: messageIndex,
-              };
-              console.log('DEBUG: Creating recommendation:', newRec);
-              console.log('DEBUG: newRec.audioUrls:', newRec.audioUrls);
-              setRecommendations(prevRecs => {
-                const isDuplicate = prevRecs.some(rec => {
-                  const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
-                  const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
-                  const sameDesc = rec.description === newRec.description;
-                  console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
-                  return sameDesc && (sameVideo || sameAudio);
-                });
-                console.log('DEBUG: isDuplicate:', isDuplicate);
-                return isDuplicate ? prevRecs : [...prevRecs, newRec];
+            const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+            const messageIndex = Math.max(0, filteredMessagesCount - 1);
+            console.log('DEBUG: messageIndex:', messageIndex);
+            const newRec: Recommendation = {
+              id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              title: data.media?.video_url ? 'Video Edit Recommendation' : (data.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
+              description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
+              status: RecommendationStatus.PENDING,
+              videoUrl: data.media?.video_url,
+              audioUrls: data.media?.audio_urls,
+              messageIndex: messageIndex,
+            };
+            console.log('DEBUG: Creating recommendation:', newRec);
+            console.log('DEBUG: newRec.audioUrls:', newRec.audioUrls);
+            setRecommendations(prevRecs => {
+              const isDuplicate = prevRecs.some(rec => {
+                const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
+                const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
+                const sameDesc = rec.description === newRec.description;
+                console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
+                return sameDesc && (sameVideo || sameAudio);
               });
-              return prev;
+              console.log('DEBUG: isDuplicate:', isDuplicate);
+              return isDuplicate ? prevRecs : [...prevRecs, newRec];
             });
           }
         }
@@ -244,7 +273,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                     console.error('Error creating version snapshot:', error);
                   }
                 }
+                setIsProcessingRecommendation(false);
               } else {
+                const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+                const messageIndex = Math.max(0, filteredMessagesCount - 1);
                 const newRec: Recommendation = {
                   id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                   title: parsedData.media?.video_url ? 'Video Edit Recommendation' : (parsedData.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
@@ -252,6 +284,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                   status: RecommendationStatus.PENDING,
                   videoUrl: parsedData.media?.video_url,
                   audioUrls: parsedData.media?.audio_urls,
+                  messageIndex: messageIndex,
                 };
                 setRecommendations(prev => {
                   const isDuplicate = prev.some(rec => 
@@ -463,12 +496,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
   };
 
   const getCombinedTimeline = useMemo(() => {
+    console.log('DEBUG getCombinedTimeline: messages.length=', messages.length);
+    console.log('DEBUG getCombinedTimeline: filteredMessages.length=', filteredMessages.length);
+    console.log('DEBUG getCombinedTimeline: recommendations.length=', recommendations.length);
+    
     const timeline: Array<{ type: 'message' | 'recommendation'; data: MessageType | Recommendation; order: number; isLatestAcceptedUndoable?: boolean }> = [];
     
     const messagesWithoutInitial = messages.filter(msg => msg.text !== INITIAL_MESSAGE);
+    console.log('DEBUG getCombinedTimeline: messagesWithoutInitial.length=', messagesWithoutInitial.length);
     
     messagesWithoutInitial.forEach((msg, index) => {
       const filteredMsg = filteredMessages[index];
+      console.log(`DEBUG getCombinedTimeline: index=${index}, filteredMsg=`, filteredMsg);
       if (filteredMsg) {
         timeline.push({ type: 'message', data: filteredMsg, order: index * 2 });
       }
@@ -479,6 +518,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
         timeline.push({ type: 'recommendation', data: msgRecommendation, order: index * 2 + 1 });
       }
     });
+    
+    console.log('DEBUG getCombinedTimeline: timeline.length=', timeline.length);
     
     const sortedTimeline = timeline.sort((a, b) => a.order - b.order);
     
@@ -659,8 +700,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           )}
           
           {getCombinedTimeline.map((item, index) => {
+            console.log('DEBUG render: item.type=', item.type, 'index=', index);
             if (item.type === 'message') {
               const msgData = item.data as MessageType;
+              console.log('DEBUG render: msgData=', msgData);
               const messageIndexInList = filteredMessages.findIndex(m => m === msgData);
               const linkedRec = recommendations.find(rec => rec.messageIndex === messageIndexInList);
               

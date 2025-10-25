@@ -49,7 +49,7 @@ def generate_speech_from_text(
             if not isinstance(current_audio_urls, list):
                 current_audio_urls = []
             current_audio_urls.append(result["audio_url"])
-            set_session_data("audio_urls", {"urls": current_audio_urls})
+            set_session_data("audio_urls", current_audio_urls)
             
             return {
                 "status": "success",
@@ -59,7 +59,8 @@ def generate_speech_from_text(
                 },
             }
         else:
-            return {"status": "error", "response": result["message"]}
+            logger.error(f"Text-to-speech generation failed: {result['message']}")
+            raise Exception(f"Failed to generate audio: {result['message']}")
             
     except Exception as ex:
         logger.error(f"ERROR: generate_speech_from_text {ex}")

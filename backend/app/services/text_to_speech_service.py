@@ -6,6 +6,8 @@ import tempfile
 from core.config import settings
 from google.cloud import storage, texttospeech
 
+os.environ["GRPC_DNS_RESOLVER"] = "native"
+
 logger = logging.getLogger(__name__)
 
 

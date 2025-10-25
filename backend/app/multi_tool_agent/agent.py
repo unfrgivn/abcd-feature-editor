@@ -257,54 +257,70 @@ USER QUERY: {query}
     print("Processing agent responses...")
     
     media_assets = {}
+    event_count = 0
+    final_responses = []
+    
     for event in events:
+        event_count += 1
+        print(f"DEBUG agent.py: Event #{event_count}: is_final={event.is_final_response()}, has_content={hasattr(event, 'content') and event.content is not None}")
+        if hasattr(event, 'content') and event.content:
+            print(f"DEBUG agent.py: Event content parts: {event.content.parts}")
         if event.is_final_response() and event.content:
             resp = event.content.parts[0].text.strip()
+            print(f"DEBUG agent.py: Final response #{len(final_responses) + 1} text: {resp}")
+            final_responses.append(resp)
+    
+    print(f"DEBUG agent.py: Collected {len(final_responses)} final responses")
+    
+    if not final_responses:
+        print(f"WARNING agent.py: No final response found after processing {event_count} events")
+        return ""
+    
+    last_response = final_responses[-1]
+    print(f"DEBUG agent.py: Using last final response: {last_response}")
+    
+    try:
+        session = AGENT_RUNNER.session_service.get_session_sync(
+            app_name=APP_NAME, 
+            user_id=USER_ID, 
+            session_id=SESSION_ID
+        )
+        if session and hasattr(session, 'state'):
+            print(f"DEBUG agent.py: Session state keys: {session.state.keys()}")
+            print(f"DEBUG agent.py: Session state: {session.state}")
             
-            try:
-                session = AGENT_RUNNER.session_service.get_session_sync(
-                    app_name=APP_NAME, 
-                    user_id=USER_ID, 
-                    session_id=SESSION_ID
-                )
-                if session and hasattr(session, 'state'):
-                    print(f"DEBUG agent.py: Session state keys: {session.state.keys()}")
-                    print(f"DEBUG agent.py: Session state: {session.state}")
-                    
-                    has_audio = 'audio_urls' in session.state and session.state['audio_urls']
-                    has_new_video = 'edited_video_url' in session.state and session.state['edited_video_url']
-                    
-                    print(f"DEBUG agent.py: has_audio={has_audio}, has_new_video={has_new_video}")
-                    
-                    if has_audio:
-                        media_assets['audio_urls'] = session.state['audio_urls']
-                        print(f"DEBUG agent.py: Setting audio_urls in media_assets: {media_assets['audio_urls']}")
-                        session.state['audio_urls'] = []
-                        print(f"DEBUG agent.py: Cleared audio_urls from session state")
-                    elif has_new_video:
-                        media_assets['video_url'] = session.state['edited_video_url']
-                        print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
-                        del session.state['edited_video_url']
-                        print(f"DEBUG agent.py: Deleted edited_video_url from session state")
-            except Exception as e:
-                print(f"ERROR agent.py: getting session state: {e}")
-                import traceback
-                traceback.print_exc()
+            has_audio = 'audio_urls' in session.state and session.state['audio_urls']
+            has_new_video = 'edited_video_url' in session.state and session.state['edited_video_url']
             
-            print(f"DEBUG agent.py: Final media_assets: {media_assets}")
+            print(f"DEBUG agent.py: has_audio={has_audio}, has_new_video={has_new_video}")
             
-            if media_assets:
-                import json
-                response_obj = {
-                    "text": resp,
-                    "media": media_assets
-                }
-                print(f"DEBUG agent.py: Returning JSON: {response_obj}")
-                return json.dumps(response_obj)
-            print(f"DEBUG agent.py: Returning plain text response")
-            return resp
-
-    return None
+            if has_new_video:
+                media_assets['video_url'] = session.state['edited_video_url']
+                print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
+                del session.state['edited_video_url']
+                print(f"DEBUG agent.py: Deleted edited_video_url from session state")
+            elif has_audio:
+                media_assets['audio_urls'] = session.state['audio_urls']
+                print(f"DEBUG agent.py: Setting audio_urls in media_assets: {media_assets['audio_urls']}")
+                session.state['audio_urls'] = []
+                print(f"DEBUG agent.py: Cleared audio_urls from session state")
+    except Exception as e:
+        print(f"ERROR agent.py: getting session state: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print(f"DEBUG agent.py: Final media_assets: {media_assets}")
+    
+    if media_assets:
+        import json
+        response_obj = {
+            "text": last_response,
+            "media": media_assets
+        }
+        print(f"DEBUG agent.py: Returning JSON: {response_obj}")
+        return json.dumps(response_obj)
+    print(f"DEBUG agent.py: Returning plain text response")
+    return last_response
 
 
 async def init_agent(
@@ -542,7 +558,16 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
     """
     
     footer = """
-    IMPORTANT: When you generate audio files or videos using the tools, DO NOT include the file URLs (like https://storage.googleapis.com/...) in your text response. The generated media will automatically appear as playable previews below your message. Only describe what you've created in natural language.
+    CRITICAL RESPONSE RULES:
+    1. ALWAYS provide a final text response to the user after using tools
+    2. When you generate audio files or videos using the tools, DO NOT include the file URLs (like https://storage.googleapis.com/...) in your text response
+    3. The generated media will automatically appear as playable previews below your message
+    4. Only describe what you've created in natural language
+    5. After completing any tool calls, you MUST respond with a user-friendly message explaining what you did
+    
+    Example responses:
+    - "I've generated an audio preview with the message 'Feeling stuck? Let's break through!' starting at 0.5 seconds. Listen to the preview above and let me know if you'd like any changes!"
+    - "I've created a video with the text overlay 'New Feature' appearing from 1.0 to 3.0 seconds. Check out the preview and let me know what you think!"
     """
     
     return base_instruction + workflow_instruction + footer
