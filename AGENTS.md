@@ -7,6 +7,7 @@
   - Backend uses `uv` for package management
   - App root is `backend/app` (not `backend`)
   - Virtual env managed by uv in `backend/app/.venv`
+  - Assume that python is already running the backend in a separate session.
 - **No test/lint commands configured** - do not assume frameworks
 
 ## Code Style
