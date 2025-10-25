@@ -25,6 +25,14 @@ from multi_tool_agent.generate_speech_tool import (
     add_audio_to_video_with_ffmpeg,
     generate_speech_from_text,
 )
+from multi_tool_agent.edit_queue_tools import (
+    add_voiceover_edit,
+    update_voiceover_timing,
+    add_text_overlay_edit,
+    remove_edit,
+    get_edit_queue_info,
+    find_voiceover_edit,
+)
 
 from .session_data import get_session_data, initialize_session_data, set_session_data
 
@@ -297,14 +305,12 @@ USER QUERY: {query}
             if has_audio and has_new_video:
                 media_assets['video_url'] = session.state['edited_video_url']
                 print(f"DEBUG agent.py: Both audio and video present - sending video_url: {media_assets['video_url']}")
-                del session.state['edited_video_url']
                 session.state['audio_urls'] = []
-                print(f"DEBUG agent.py: Cleared both edited_video_url and audio_urls from session state")
+                print(f"DEBUG agent.py: Cleared audio_urls from session state (keeping edited_video_url for edit queue)")
             elif has_new_video:
                 media_assets['video_url'] = session.state['edited_video_url']
                 print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
-                del session.state['edited_video_url']
-                print(f"DEBUG agent.py: Deleted edited_video_url from session state")
+                print(f"DEBUG agent.py: Keeping edited_video_url in session state for edit queue")
             elif has_audio:
                 media_assets['audio_urls'] = session.state['audio_urls']
                 print(f"DEBUG agent.py: Setting audio_urls in media_assets: {media_assets['audio_urls']}")
@@ -422,6 +428,36 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
     - Detection Status: Whether this feature is currently detected in the video
     - LLM Explanation: Previous analysis or explanation about this feature
     - Current Recommendations: Suggested edits or improvements for this feature for the user to consider
+    
+    EDIT QUEUE SYSTEM - CRITICAL UNDERSTANDING:
+    You now have access to an Edit Queue system that tracks all edits made to the video. This is ESSENTIAL for handling user requests correctly:
+    
+    1. DETECTING UPDATE vs ADD REQUESTS:
+       - "Move the voiceover from 0.5s to 2s" → UPDATE (modify existing edit)
+       - "Change the voiceover timing to 3s" → UPDATE
+       - "Make the voiceover start at 1s instead" → UPDATE
+       - "Add another voiceover at 5s" → ADD (new edit)
+       - "Also add text at 2s" → ADD
+    
+    2. WORKFLOW FOR UPDATES:
+       When user wants to MODIFY an existing edit:
+       a) Call `find_voiceover_edit()` to get the current voiceover edit ID
+       b) Call `update_voiceover_timing(edit_id, new_start_ms)` with the edit ID and new timing
+       c) This will regenerate the video with the UPDATED timing (NOT duplicate)
+    
+    3. WORKFLOW FOR NEW EDITS:
+       When user wants to ADD a new edit:
+       a) Call `add_voiceover_edit(text, start_ms, original_video_url)` for new voiceovers
+       b) Call `add_text_overlay_edit(text, start_ms, end_ms, original_video_url)` for new text
+    
+    4. CHECKING CURRENT STATE:
+       - Before making changes, you can call `get_edit_queue_info()` to see all current edits
+       - Use `find_voiceover_edit()` to check if a voiceover already exists
+    
+    5. REMOVING EDITS:
+       - Call `remove_edit(edit_id)` to remove an edit and regenerate the video
+    
+    CRITICAL: Always determine if the user wants to UPDATE an existing edit or ADD a new one before calling tools.
     """
     
     if feature_config:
@@ -443,17 +479,25 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
        b) IMMEDIATELY generate the actual media:
           * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
           * Then ask the user to review the audio preview
-          * Ask if they want to generate the video with this voiceover
-          * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+          * Ask if they want to add this voiceover to the video
+          * WAIT for user confirmation (e.g., "Yes", "Sure", "Go ahead")
        
        c) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER CONFIRMATION:
+    When user confirms (says "Yes", "Sure", "Go ahead", etc.) to add the voiceover:
+    1. Get the current recommendations using `get_current_recommendations` to retrieve voice_message and start_at_milliseconds
+    2. Extract the Video URL from the FEATURE CONTEXT section above (it's listed as "- Video URL: ...")
+     3. CRITICAL: Call `add_voiceover_edit(text=voice_message, start_ms=start_at_milliseconds)` - the video_url is automatically retrieved from the agent's context
+    4. The tool will return a new video_url - you MUST include this in your response media
+    5. DO NOT just say you've added it - actually call the tool and return the new video
     
     WORKFLOW FOR USER EDITS:
     When a user requests changes to audio:
     - Use `generate_speech_from_text` to create the audio file preview
     - Ask the user to review the audio
-    - Ask if they want to generate the video with this voiceover
-    - WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+    - Ask if they want to add this voiceover to the video
+    - WAIT for user confirmation before calling `add_voiceover_edit`
     
     VOICEOVER COPY RULES:
     - Voiceover copy MUST be 1-2 sentences maximum
@@ -498,17 +542,25 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
        b) IMMEDIATELY generate the actual media:
           * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
           * Then ask the user to review the audio preview
-          * Ask if they want to generate the video with this voiceover
-          * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+          * Ask if they want to add this voiceover to the video
+          * WAIT for user confirmation (e.g., "Yes", "Sure", "Go ahead")
        
        c) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER CONFIRMATION:
+    When user confirms (says "Yes", "Sure", "Go ahead", etc.) to add the voiceover:
+    1. Get the current recommendations using `get_current_recommendations` to retrieve voice_message and start_at_milliseconds
+    2. Extract the Video URL from the FEATURE CONTEXT section above (it's listed as "- Video URL: ...")
+     3. CRITICAL: Call `add_voiceover_edit(text=voice_message, start_ms=start_at_milliseconds)` - the video_url is automatically retrieved from the agent's context
+    4. The tool will return a new video_url - you MUST include this in your response media
+    5. DO NOT just say you've added it - actually call the tool and return the new video
     
     WORKFLOW FOR USER EDITS:
     When a user requests changes to voiceover:
     - Use `generate_speech_from_text` to create the audio file preview
     - Ask the user to review the audio
-    - Ask if they want to generate the video with this voiceover
-    - WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+    - Ask if they want to add this voiceover to the video
+    - WAIT for user confirmation before calling `add_voiceover_edit`
     
     VOICEOVER COPY RULES:
     - Voiceover copy MUST be 1-2 sentences maximum
@@ -541,19 +593,27 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
           - For Supers with Audio: 
             * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
             * Then ask the user to review the audio preview
-            * Ask if they want to generate the video with this voiceover
-            * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+            * Ask if they want to add this voiceover to the video
+            * WAIT for user confirmation (e.g., "Yes", "Sure", "Go ahead")
           - For text-only Supers: ALWAYS call `add_text_to_video_with_ffmpeg` to create the video with text overlay
        
        d) Finally, call `get_current_recommendations` to retrieve and describe them
+    
+    WORKFLOW FOR USER CONFIRMATION:
+    When user confirms (says "Yes", "Sure", "Go ahead", etc.) to add the voiceover:
+    1. Get the current recommendations using `get_current_recommendations` to retrieve voice_message and start_at_milliseconds
+    2. Extract the Video URL from the FEATURE CONTEXT section above (it's listed as "- Video URL: ...")
+     3. CRITICAL: Call `add_voiceover_edit(text=voice_message, start_ms=start_at_milliseconds)` - the video_url is automatically retrieved from the agent's context
+    4. The tool will return a new video_url - you MUST include this in your response media
+    5. DO NOT just say you've added it - actually call the tool and return the new video
     
     WORKFLOW FOR USER EDITS:
     When a user requests changes to audio or text:
     - For audio changes: 
       * Use `generate_speech_from_text` to create the audio file preview
       * Ask the user to review the audio
-      * Ask if they want to generate the video with this voiceover
-      * WAIT for user confirmation before calling `add_audio_to_video_with_ffmpeg`
+      * Ask if they want to add this voiceover to the video
+      * WAIT for user confirmation before calling `add_voiceover_edit`
     - For text overlay changes: Use `add_text_to_video_with_ffmpeg` to create the video with text
     - Don't just describe what you would do - actually call the tool to generate the file
     
@@ -570,9 +630,12 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
     3. The generated media will automatically appear as playable previews below your message
     4. Only describe what you've created in natural language
     5. After completing any tool calls, you MUST respond with a user-friendly message explaining what you did
+    6. CRITICAL: When you generate an audio preview and ask the user if they want to apply it, your message MUST end with a question mark (?)
+       - This is required for the UI to detect that you're asking for confirmation
+       - Example: "I've generated an audio preview. Would you like me to add this voiceover to your video?"
     
     Example responses:
-    - "I've generated an audio preview with the message 'Feeling stuck? Let's break through!' starting at 0.5 seconds. Listen to the preview above and let me know if you'd like any changes!"
+    - "I've generated an audio preview with the message 'Feeling stuck? Let's break through!' starting at 0.5 seconds. Listen to the preview above - would you like me to add this voiceover to your video?"
     - "I've created a video with the text overlay 'New Feature' appearing from 1.0 to 3.0 seconds. Check out the preview and let me know what you think!"
     """
     
@@ -587,6 +650,12 @@ def create_agent():
         generate_speech_from_text,
         add_text_to_video_with_ffmpeg,
         add_audio_to_video_with_ffmpeg,
+        add_voiceover_edit,
+        update_voiceover_timing,
+        add_text_overlay_edit,
+        remove_edit,
+        get_edit_queue_info,
+        find_voiceover_edit,
     ]
 
     name = "ai_editor_agent"

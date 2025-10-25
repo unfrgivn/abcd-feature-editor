@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Message as MessageType, Role, Feature, Recommendation, RecommendationStatus, Session } from '../types';
+import { Message as MessageType, Role, Feature, Recommendation, RecommendationStatus, Session, EditQueue as EditQueueType } from '../types';
 import * as geminiService from '../services/geminiService';
 import * as sessionService from '../services/sessionService';
 import axios from 'axios';
@@ -8,6 +8,7 @@ import ChatInput from './ChatInput';
 import RecommendationWorkflow from './RecommendationWorkflow';
 import ResponsiveVideoPlayer from './ResponsiveVideoPlayer';
 import VersionHistory from './VersionHistory';
+import { EditQueue } from './EditQueue';
 import { XIcon } from './icons/XIcon';
 
 interface ChatWindowProps {
@@ -31,6 +32,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
   const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
   const [videoHistory, setVideoHistory] = useState<string[]>([]);
   const [applyingRecommendationId, setApplyingRecommendationId] = useState<string | null>(null);
+  const [editQueue, setEditQueue] = useState<EditQueueType | null>(null);
   const applyingRecommendationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef<boolean>(false);
@@ -51,6 +53,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
         setVideoHistory(history);
         setCurrentVideoIndex(history.length - 1);
       }
+      
+      fetchEditQueue();
     } else {
       setMessages([]);
       setRecommendations([]);
@@ -61,6 +65,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
       }
     }
   }, [currentSession?.session_id, featureToEdit?.videoUrl]);
+
+  const fetchEditQueue = async () => {
+    if (!currentSession) return;
+    
+    try {
+      const response = await axios.get(`http://127.0.0.1:8000/api/sessions/edit-queue`, {
+        params: {
+          user_id: userId,
+          session_id: currentSession.session_id,
+        }
+      });
+      
+      if (response.data) {
+        setEditQueue(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching edit queue:', error);
+    }
+  };
 
   useEffect(() => {
     if (currentSession && messages.length > 0) {
@@ -127,6 +150,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
       const { data } = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
         query: inputText,
         feature_id: featureToEdit?.id,
+        user_id: userId,
+        session_id: currentSession?.session_id,
       });
       
       console.log('DEBUG: Backend response type:', typeof data);
@@ -141,45 +166,59 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           media: data.media
         };
         
-        const hasMedia = data.media && (data.media.video_url || data.media.audio_urls);
+        const hasVideoUrl = data.media?.video_url;
+        const hasAudioUrls = data.media?.audio_urls;
         const isQuestion = data.text.trim().endsWith('?');
-        const shouldCreateRecommendation = hasMedia || isQuestion;
         
-        console.log('DEBUG: shouldCreateRecommendation:', shouldCreateRecommendation);
-        console.log('DEBUG: hasMedia:', hasMedia, 'isQuestion:', isQuestion);
-        console.log('DEBUG: Full data object:', JSON.stringify(data, null, 2));
+        console.log('DEBUG: hasVideoUrl:', hasVideoUrl);
+        console.log('DEBUG: hasAudioUrls:', hasAudioUrls);
+        console.log('DEBUG: isQuestion:', isQuestion);
         
-        if (shouldCreateRecommendation) {
-          console.log('DEBUG: Found media or question in response');
-          console.log('DEBUG: video_url:', data.media?.video_url);
-          console.log('DEBUG: audio_urls:', data.media?.audio_urls);
-          console.log('DEBUG: isQuestion:', isQuestion);
-          console.log('DEBUG: hasMedia:', hasMedia);
-          
-          console.log('DEBUG: Creating new recommendation');
+        if (hasAudioUrls || isQuestion) {
+          console.log('DEBUG: Question or audio preview - creating PENDING recommendation');
           const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
-          const messageIndex = Math.max(0, filteredMessagesCount - 1);
-          console.log('DEBUG: messageIndex:', messageIndex);
+          const messageIndex = filteredMessagesCount;
           const newRec: Recommendation = {
             id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            title: data.media?.video_url ? 'Video Edit Recommendation' : (data.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
+            title: hasAudioUrls ? 'Audio Recommendation' : 'Text Recommendation',
             description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
             status: RecommendationStatus.PENDING,
             videoUrl: data.media?.video_url,
             audioUrls: data.media?.audio_urls,
             messageIndex: messageIndex,
           };
-          console.log('DEBUG: Creating recommendation:', newRec);
-          console.log('DEBUG: newRec.audioUrls:', newRec.audioUrls);
           setRecommendations(prevRecs => {
             const isDuplicate = prevRecs.some(rec => {
               const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
               const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
               const sameDesc = rec.description === newRec.description;
-              console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
               return sameDesc && (sameVideo || sameAudio);
             });
-            console.log('DEBUG: isDuplicate:', isDuplicate);
+            return isDuplicate ? prevRecs : [...prevRecs, newRec];
+          });
+        } else if (hasVideoUrl) {
+          console.log('DEBUG: Non-question message with video_url - adding to history and marking ACCEPTED');
+          setVideoHistory(prev => [...prev, data.media.video_url]);
+          setCurrentVideoIndex(prev => prev + 1);
+          
+          const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+          const messageIndex = filteredMessagesCount;
+          const newRec: Recommendation = {
+            id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: 'Video Edit Applied',
+            description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
+            status: RecommendationStatus.ACCEPTED,
+            videoUrl: data.media.video_url,
+            messageIndex: messageIndex,
+          };
+          setRecommendations(prevRecs => [...prevRecs, newRec]);
+          setRecommendations(prevRecs => {
+            const isDuplicate = prevRecs.some(rec => {
+              const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
+              const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
+              const sameDesc = rec.description === newRec.description;
+              return sameDesc && (sameVideo || sameAudio);
+            });
             return isDuplicate ? prevRecs : [...prevRecs, newRec];
           });
         }
@@ -193,16 +232,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
               media: parsedData.media
             };
             
-            const hasMedia = parsedData.media && (parsedData.media.video_url || parsedData.media.audio_urls);
+            const hasVideoUrl = parsedData.media?.video_url;
+            const hasAudioUrls = parsedData.media?.audio_urls;
             const isQuestion = parsedData.text.trim().endsWith('?');
-            const shouldCreateRecommendation = hasMedia || isQuestion;
             
-            if (shouldCreateRecommendation) {
+            if (hasAudioUrls || isQuestion) {
               const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
-              const messageIndex = Math.max(0, filteredMessagesCount - 1);
+              const messageIndex = filteredMessagesCount;
               const newRec: Recommendation = {
                 id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: parsedData.media?.video_url ? 'Video Edit Recommendation' : (parsedData.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
+                title: hasAudioUrls ? 'Audio Recommendation' : 'Text Recommendation',
                 description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
                 status: RecommendationStatus.PENDING,
                 videoUrl: parsedData.media?.video_url,
@@ -217,6 +256,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                 );
                 return isDuplicate ? prev : [...prev, newRec];
               });
+            } else if (hasVideoUrl) {
+              setVideoHistory(prev => [...prev, parsedData.media.video_url]);
+              setCurrentVideoIndex(prev => prev + 1);
+              
+              const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+              const messageIndex = filteredMessagesCount;
+              const newRec: Recommendation = {
+                id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: 'Video Edit Applied',
+                description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
+                status: RecommendationStatus.ACCEPTED,
+                videoUrl: parsedData.media.video_url,
+                messageIndex: messageIndex,
+              };
+              setRecommendations(prev => [...prev, newRec]);
+              
+              if (currentSession) {
+                try {
+                  await sessionService.createVersion(currentSession.pk, parsedData.media.video_url);
+                } catch (error) {
+                  console.error('Error creating version snapshot:', error);
+                }
+              }
             }
           } else {
             botMessage = { role: Role.MODEL, text: data };
@@ -229,6 +291,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
       }
       
       setMessages((prev) => [...prev.slice(0, -1), botMessage]);
+      
+      fetchEditQueue();
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
       setMessages(prev => [...prev.slice(0, -1), { role: Role.MODEL, text: `Error: ${errorMessage}` }]);
@@ -269,6 +333,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
         const { data } = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
           query: "Yes, please apply that change.",
           feature_id: featureToEdit?.id,
+          user_id: userId,
+          session_id: currentSession?.session_id,
         });
         
         console.log('DEBUG: Backend response after accepting:', data);
@@ -298,9 +364,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           };
           setMessages(prev => [...prev, followUpMessage]);
           
-          setApplyingRecommendationId(null);
-          applyingRecommendationIdRef.current = null;
+          fetchEditQueue();
+        } else {
+          console.warn('DEBUG: No video_url in response, marking as ACCEPTED anyway');
+          setRecommendations(prev => 
+            prev.map(rec => 
+              rec.id === recommendationId 
+                ? { ...rec, status: RecommendationStatus.ACCEPTED }
+                : rec
+            )
+          );
+          
+          const followUpMessage: MessageType = { 
+            role: Role.MODEL, 
+            text: data.text || "I've processed your request. Is there anything else you'd like me to adjust?"
+          };
+          setMessages(prev => [...prev, followUpMessage]);
         }
+        
+        setApplyingRecommendationId(null);
+        applyingRecommendationIdRef.current = null;
       } catch (error) {
         console.error('Error applying recommendation:', error);
         setRecommendations(prev => 
@@ -378,6 +461,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           : rec
       )
     );
+  };
+
+  const handleRemoveEdit = async (editId: string) => {
+    if (!currentSession) return;
+    
+    try {
+      const response = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
+        query: `Remove edit with ID ${editId}`,
+        feature_id: featureToEdit?.id,
+        user_id: userId,
+        session_id: currentSession?.session_id,
+      });
+      
+      console.log('Edit removed:', response.data);
+      
+      fetchEditQueue();
+      
+      if (response.data.media?.video_url) {
+        setVideoHistory(prev => [...prev, response.data.media.video_url]);
+        setCurrentVideoIndex(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Error removing edit:', error);
+      alert('Failed to remove edit. Please try again.');
+    }
   };
 
   const handleExportVideo = async () => {
@@ -659,6 +767,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
               </button>
             </div>
           )}
+          
+          <EditQueue editQueue={editQueue} onRemoveEdit={handleRemoveEdit} />
           
           {currentSession && (
             <div className="mb-6">

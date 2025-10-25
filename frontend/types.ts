@@ -70,3 +70,22 @@ export interface SessionVersion {
   video_url: string | null;
   created_at: string;
 }
+
+export type EditType = 'voiceover' | 'text_overlay' | 'trim' | 'filter';
+export type EditStatus = 'pending' | 'applied' | 'reverted';
+
+export interface Edit {
+  id: string;
+  type: EditType;
+  params: Record<string, any>;
+  timestamp: string;
+  status: EditStatus;
+  result_video_url?: string;
+}
+
+export interface EditQueue {
+  session_id: string;
+  original_video_url: string;
+  edits: Edit[];
+  current_video_url: string;
+}

@@ -38,6 +38,11 @@ async def call_ai_editor_agent(userQuery: UserQuery):
         import json
 
         print(f"Calling agent with query: {userQuery.query}")
+        
+        if userQuery.user_id and userQuery.session_id:
+            from multi_tool_agent.session_data import set_frontend_session_info
+            set_frontend_session_info(userQuery.user_id, userQuery.session_id, database_session_service)
+        
         response = agent.call_agent(userQuery.query, userQuery.feature_id)
         print(f"Agent returned response type: {type(response)}, value: {repr(response)}")
         
@@ -288,6 +293,35 @@ async def delete_all_sessions(
         )
     except Exception as ex:
         logging.error("Delete all sessions - ERROR: %s", str(ex))
+        return Response(content=f"ERROR: {ex}", status_code=500)
+
+
+@router.get("/sessions/edit-queue")
+async def get_edit_queue(
+    user_id: str = Query(...),
+    session_id: str = Query(...)
+):
+    """Get the edit queue for a session"""
+    try:
+        app_name = os.getenv("APP_NAME", "wpromote-codesprint-2025")
+        session = database_session_service.get_session(
+            app_name=app_name,
+            user_id=user_id,
+            session_id=session_id
+        )
+        
+        if not session:
+            return Response(content="Session not found", status_code=404)
+        
+        edit_queue_data = database_session_service.get_state(session["pk"], "edit_queue")
+        
+        import json
+        if edit_queue_data:
+            return Response(content=json.dumps(edit_queue_data), status_code=200)
+        else:
+            return Response(content=json.dumps(None), status_code=200)
+    except Exception as ex:
+        logging.error("Get edit queue - ERROR: %s", str(ex))
         return Response(content=f"ERROR: {ex}", status_code=500)
 
 
