@@ -104,3 +104,12 @@ export const renameSession = async (
 
   await axios.put(`${API_BASE}/sessions/rename?${params.toString()}`);
 };
+
+export const deleteAllSessions = async (userId: string): Promise<{ deleted_count: number; message: string }> => {
+  const params = new URLSearchParams({
+    user_id: userId,
+  });
+
+  const response = await axios.delete(`${API_BASE}/sessions/delete-all?${params.toString()}`);
+  return response.data;
+};

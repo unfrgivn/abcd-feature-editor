@@ -85,6 +85,8 @@ class DatabaseSessionService:
             """, (app_name, user_id, session_id, video_id, video_url, feature_id, now, now))
             
             session_pk = cursor.lastrowid
+            if session_pk is None:
+                raise ValueError("Failed to create session")
             conn.commit()
             logger.info(f"Session created: {app_name}/{user_id}/{session_id}")
             return session_pk
@@ -260,6 +262,8 @@ class DatabaseSessionService:
             """, (session_pk, next_version, video_url, state_snapshot, now))
             
             version_id = cursor.lastrowid
+            if version_id is None:
+                raise ValueError("Failed to create version")
             conn.commit()
             logger.info(f"Created version {next_version} for session_pk={session_pk}")
             return version_id
@@ -294,6 +298,17 @@ class DatabaseSessionService:
             """, (app_name, user_id, session_id))
             conn.commit()
             logger.info(f"Deleted session: {app_name}/{user_id}/{session_id}")
+    
+    def delete_all_sessions(self, user_id: str) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM sessions WHERE user_id = ?
+            """, (user_id,))
+            deleted_count = cursor.rowcount
+            conn.commit()
+            logger.info(f"Deleted {deleted_count} sessions for user_id={user_id}")
+            return deleted_count
 
 
 database_session_service = DatabaseSessionService()

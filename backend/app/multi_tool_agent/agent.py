@@ -272,23 +272,20 @@ USER QUERY: {query}
                     print(f"DEBUG agent.py: Session state: {session.state}")
                     
                     has_audio = 'audio_urls' in session.state and session.state['audio_urls']
-                    has_video = 'edited_video_url' in session.state and session.state['edited_video_url']
+                    has_new_video = 'edited_video_url' in session.state and session.state['edited_video_url']
                     
-                    print(f"DEBUG agent.py: has_audio={has_audio}, has_video={has_video}")
+                    print(f"DEBUG agent.py: has_audio={has_audio}, has_new_video={has_new_video}")
                     
-                    if has_video:
-                        media_assets['video_url'] = session.state['edited_video_url']
-                        print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
-                        del session.state['edited_video_url']
-                        print(f"DEBUG agent.py: Deleted edited_video_url from session state")
-                        if has_audio:
-                            session.state['audio_urls'] = []
-                            print(f"DEBUG agent.py: Cleared audio_urls from session state")
-                    elif has_audio:
+                    if has_audio:
                         media_assets['audio_urls'] = session.state['audio_urls']
                         print(f"DEBUG agent.py: Setting audio_urls in media_assets: {media_assets['audio_urls']}")
                         session.state['audio_urls'] = []
                         print(f"DEBUG agent.py: Cleared audio_urls from session state")
+                    elif has_new_video:
+                        media_assets['video_url'] = session.state['edited_video_url']
+                        print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
+                        del session.state['edited_video_url']
+                        print(f"DEBUG agent.py: Deleted edited_video_url from session state")
             except Exception as e:
                 print(f"ERROR agent.py: getting session state: {e}")
                 import traceback

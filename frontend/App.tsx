@@ -124,6 +124,23 @@ function App() {
     setView('table');
   };
 
+  const handleClearAllSessions = async () => {
+    try {
+      if (currentSession) {
+        await axios.post('http://127.0.0.1:8000/api/cleanup');
+        console.log('Active session cleaned up before clearing all');
+      }
+      
+      await sessionService.deleteAllSessions(userId);
+      setSessions([]);
+      setCurrentSession(null);
+      setEditingFeature(null);
+      setView('table');
+    } catch (error) {
+      console.error('Error clearing all sessions:', error);
+    }
+  };
+
   const handleCloseChat = () => {
     setCurrentSession(null);
     setEditingFeature(null);
@@ -149,6 +166,7 @@ function App() {
         onSessionDelete={handleSessionDelete}
         onSessionRename={handleSessionRename}
         onNewSession={handleNewSession}
+        onClearAllSessions={handleClearAllSessions}
       />
       <aside className="w-16 bg-[#1a2b52] flex flex-col items-center py-4 space-y-6">
         <div className="w-10 h-10 bg-[#4a9eff] rounded-lg flex items-center justify-center text-white font-bold text-xl">

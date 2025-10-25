@@ -141,13 +141,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           media: data.media
         };
         
-        if (data.media && (data.media.video_url || data.media.audio_urls)) {
-          console.log('DEBUG: Found media in response');
+        const hasMedia = data.media && (data.media.video_url || data.media.audio_urls);
+        const isQuestion = data.text.trim().endsWith('?');
+        const shouldCreateRecommendation = hasMedia || isQuestion;
+        
+        if (shouldCreateRecommendation) {
+          console.log('DEBUG: Found media or question in response');
           console.log('DEBUG: applyingRecommendationIdRef.current:', applyingRecommendationIdRef.current);
-          console.log('DEBUG: video_url:', data.media.video_url);
-          console.log('DEBUG: audio_urls:', data.media.audio_urls);
+          console.log('DEBUG: video_url:', data.media?.video_url);
+          console.log('DEBUG: audio_urls:', data.media?.audio_urls);
+          console.log('DEBUG: isQuestion:', isQuestion);
           
-          if (applyingRecommendationIdRef.current) {
+          if (applyingRecommendationIdRef.current && hasMedia) {
             console.log('DEBUG: Updating existing recommendation:', applyingRecommendationIdRef.current);
             const recId = applyingRecommendationIdRef.current;
             setRecommendations(prev => 
@@ -166,31 +171,39 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                 console.log('DEBUG: Version snapshot created for applied recommendation');
                 setVideoHistory(prev => [...prev, data.media.video_url]);
                 setCurrentVideoIndex(prev => prev + 1);
+                setIsProcessingRecommendation(false);
               } catch (error) {
                 console.error('Error creating version snapshot:', error);
+                setIsProcessingRecommendation(false);
               }
             }
           } else {
             console.log('DEBUG: Creating new recommendation');
-            const newRec: Recommendation = {
-              id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              title: data.media.video_url ? 'Video Edit Recommendation' : 'Audio Recommendation',
-              description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
-              status: RecommendationStatus.PENDING,
-              videoUrl: data.media.video_url,
-              audioUrls: data.media.audio_urls,
-            };
-            console.log('DEBUG: Creating recommendation:', newRec);
-            setRecommendations(prev => {
-              const isDuplicate = prev.some(rec => {
-                const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
-                const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
-                const sameDesc = rec.description === newRec.description;
-                console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
-                return sameDesc && (sameVideo || sameAudio);
+            setMessages(prev => {
+              const messageIndex = prev.filter(msg => msg.text !== INITIAL_MESSAGE).length - 1;
+              const newRec: Recommendation = {
+                id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: data.media?.video_url ? 'Video Edit Recommendation' : (data.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
+                description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
+                status: RecommendationStatus.PENDING,
+                videoUrl: data.media?.video_url,
+                audioUrls: data.media?.audio_urls,
+                messageIndex: messageIndex,
+              };
+              console.log('DEBUG: Creating recommendation:', newRec);
+              console.log('DEBUG: newRec.audioUrls:', newRec.audioUrls);
+              setRecommendations(prevRecs => {
+                const isDuplicate = prevRecs.some(rec => {
+                  const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
+                  const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
+                  const sameDesc = rec.description === newRec.description;
+                  console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
+                  return sameDesc && (sameVideo || sameAudio);
+                });
+                console.log('DEBUG: isDuplicate:', isDuplicate);
+                return isDuplicate ? prevRecs : [...prevRecs, newRec];
               });
-              console.log('DEBUG: isDuplicate:', isDuplicate);
-              return isDuplicate ? prev : [...prev, newRec];
+              return prev;
             });
           }
         }
@@ -204,8 +217,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
               media: parsedData.media
             };
             
-            if (parsedData.media && (parsedData.media.video_url || parsedData.media.audio_urls)) {
-              if (applyingRecommendationIdRef.current) {
+            const hasMedia = parsedData.media && (parsedData.media.video_url || parsedData.media.audio_urls);
+            const isQuestion = parsedData.text.trim().endsWith('?');
+            const shouldCreateRecommendation = hasMedia || isQuestion;
+            
+            if (shouldCreateRecommendation) {
+              if (applyingRecommendationIdRef.current && hasMedia) {
                 const recId = applyingRecommendationIdRef.current;
                 setRecommendations(prev => 
                   prev.map(rec => 
@@ -230,11 +247,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
               } else {
                 const newRec: Recommendation = {
                   id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                  title: parsedData.media.video_url ? 'Video Edit Recommendation' : 'Audio Recommendation',
+                  title: parsedData.media?.video_url ? 'Video Edit Recommendation' : (parsedData.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
                   description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
                   status: RecommendationStatus.PENDING,
-                  videoUrl: parsedData.media.video_url,
-                  audioUrls: parsedData.media.audio_urls,
+                  videoUrl: parsedData.media?.video_url,
+                  audioUrls: parsedData.media?.audio_urls,
                 };
                 setRecommendations(prev => {
                   const isDuplicate = prev.some(rec => 
@@ -272,12 +289,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
     console.log('DEBUG: handleAcceptRecommendation called for:', recommendationId);
     console.log('DEBUG: Recommendation:', recommendation);
     
+    setRecommendations(prev => 
+      prev.map(rec => 
+        rec.id === recommendationId 
+          ? { ...rec, status: RecommendationStatus.PROCESSING }
+          : rec
+      )
+    );
+    
     if (recommendation?.audioUrls && !recommendation.videoUrl) {
       console.log('DEBUG: Setting applyingRecommendationId to:', recommendationId);
       setApplyingRecommendationId(recommendationId);
       applyingRecommendationIdRef.current = recommendationId;
-      await handleSendMessage("Yes, please add this audio to the video.");
-      setIsProcessingRecommendation(false);
+      await handleSendMessage("Yes, please do that.");
+      return;
+    }
+    
+    if (!recommendation?.audioUrls && !recommendation?.videoUrl) {
+      setApplyingRecommendationId(recommendationId);
+      applyingRecommendationIdRef.current = recommendationId;
+      await handleSendMessage("Yes, please do that.");
       return;
     }
     
@@ -387,31 +418,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
 
   const filteredMessages = useMemo(() => {
     return messages
-      .filter(msg => msg.text !== INITIAL_MESSAGE)
-      .map(msg => {
-        let updatedMedia = msg.media ? { ...msg.media } : undefined;
-        
-        if (msg.media?.audio_urls) {
-          const hasAudioRecommendation = recommendations.some(
-            rec => rec.audioUrls?.some(url => msg.media?.audio_urls?.includes(url))
-          );
-          if (hasAudioRecommendation && updatedMedia) {
-            updatedMedia.audio_urls = undefined;
-          }
-        }
-        
-        if (msg.media?.video_url) {
-          const hasVideoRecommendation = recommendations.some(
-            rec => rec.videoUrl === msg.media?.video_url
-          );
-          if (hasVideoRecommendation && updatedMedia) {
-            updatedMedia.video_url = undefined;
-          }
-        }
-        
-        return updatedMedia ? { ...msg, media: updatedMedia } : msg;
-      });
-  }, [messages, recommendations]);
+      .filter(msg => msg.text !== INITIAL_MESSAGE);
+  }, [messages]);
 
   const mockScores = () => {
     const hash = featureToEdit?.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 0;
@@ -455,34 +463,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
   };
 
   const getCombinedTimeline = useMemo(() => {
-    const timeline: Array<{ type: 'message' | 'recommendation'; data: MessageType | Recommendation; order: number }> = [];
+    const timeline: Array<{ type: 'message' | 'recommendation'; data: MessageType | Recommendation; order: number; isLatestAcceptedUndoable?: boolean }> = [];
     
     const messagesWithoutInitial = messages.filter(msg => msg.text !== INITIAL_MESSAGE);
     
     messagesWithoutInitial.forEach((msg, index) => {
-      const msgRecommendation = recommendations.find(rec => {
-        if (rec.status !== RecommendationStatus.ACCEPTED) return false;
-        
-        if (msg.media?.video_url) {
-          return rec.videoUrl === msg.media.video_url;
-        }
-        if (msg.media?.audio_urls && rec.audioUrls) {
-          return rec.audioUrls.some(url => msg.media?.audio_urls?.includes(url));
-        }
-        return false;
-      });
-      
       const filteredMsg = filteredMessages[index];
       if (filteredMsg) {
         timeline.push({ type: 'message', data: filteredMsg, order: index * 2 });
       }
+      
+      const msgRecommendation = recommendations.find(rec => rec.messageIndex === index);
       
       if (msgRecommendation) {
         timeline.push({ type: 'recommendation', data: msgRecommendation, order: index * 2 + 1 });
       }
     });
     
-    return timeline.sort((a, b) => a.order - b.order);
+    const sortedTimeline = timeline.sort((a, b) => a.order - b.order);
+    
+    const lastItem = sortedTimeline[sortedTimeline.length - 1];
+    if (lastItem && lastItem.type === 'recommendation') {
+      const rec = lastItem.data as Recommendation;
+      if (rec.status === RecommendationStatus.ACCEPTED) {
+        const acceptedRecs = recommendations.filter(r => r.status === RecommendationStatus.ACCEPTED);
+        const isLatestAccepted = acceptedRecs[acceptedRecs.length - 1]?.id === rec.id;
+        lastItem.isLatestAcceptedUndoable = isLatestAccepted;
+      }
+    }
+    
+    return sortedTimeline;
   }, [messages, filteredMessages, recommendations]);
 
   return (
@@ -648,38 +658,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
             </div>
           )}
           
-          {recommendations.filter(r => r.status === RecommendationStatus.PENDING).length > 0 && (
-            <div className="mb-6">
-              <RecommendationWorkflow
-                recommendations={recommendations.filter(r => r.status === RecommendationStatus.PENDING)}
-                onAccept={handleAcceptRecommendation}
-                onReject={handleRejectRecommendation}
-                onUndo={handleUndoRecommendation}
-                isLatestAccepted={false}
-              />
-            </div>
-          )}
-          
           {getCombinedTimeline.map((item, index) => {
             if (item.type === 'message') {
-              return <Message key={`msg-${index}`} message={item.data as MessageType} />;
-            } else {
-              const rec = item.data as Recommendation;
-              const acceptedRecs = recommendations.filter(r => r.status === RecommendationStatus.ACCEPTED);
-              const isLatestAccepted = acceptedRecs[acceptedRecs.length - 1]?.id === rec.id;
+              const msgData = item.data as MessageType;
+              const messageIndexInList = filteredMessages.findIndex(m => m === msgData);
+              const linkedRec = recommendations.find(rec => rec.messageIndex === messageIndexInList);
               
               return (
-                <div key={rec.id} className="mb-4">
-                  <RecommendationWorkflow
-                    recommendations={[rec]}
-                    onAccept={handleAcceptRecommendation}
-                    onReject={handleRejectRecommendation}
-                    onUndo={handleUndoRecommendation}
-                    isLatestAccepted={isLatestAccepted}
-                  />
-                </div>
+                <Message 
+                  key={`msg-${index}`} 
+                  message={msgData}
+                  recommendation={linkedRec}
+                  onAcceptRecommendation={handleAcceptRecommendation}
+                  onRejectRecommendation={handleRejectRecommendation}
+                />
               );
             }
+            return null;
           })}
           {isLoading && filteredMessages[filteredMessages.length - 1]?.text === '' && (
             <div className="flex justify-start">

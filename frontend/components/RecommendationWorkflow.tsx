@@ -147,7 +147,7 @@ const RecommendationWorkflow: React.FC<RecommendationWorkflowProps> = ({
                         <div>
                           <span className="font-medium">Audio:</span> {rec.metadata.audio_text}
                         </div>
-                      )}
+                        )}
                       {rec.metadata.position && (
                         <div>
                           <span className="font-medium">Position:</span> {rec.metadata.position}

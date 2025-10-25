@@ -28,6 +28,7 @@ export interface Feature {
 
 export enum RecommendationStatus {
   PENDING = 'pending',
+  PROCESSING = 'processing',
   ACCEPTED = 'accepted',
   REJECTED = 'rejected',
 }
@@ -47,6 +48,7 @@ export interface Recommendation {
   videoUrl?: string;
   audioUrls?: string[];
   metadata?: RecommendationMetadata;
+  messageIndex?: number;
 }
 
 export interface Session {

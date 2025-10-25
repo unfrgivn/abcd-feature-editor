@@ -10,6 +10,7 @@ interface SessionListProps {
   onSessionDelete: (sessionId: string) => void;
   onSessionRename?: (sessionId: string, newName: string) => void;
   onNewSession: () => void;
+  onClearAllSessions?: () => void;
 }
 
 const SessionList: React.FC<SessionListProps> = ({
@@ -19,11 +20,13 @@ const SessionList: React.FC<SessionListProps> = ({
   onSessionDelete,
   onSessionRename,
   onNewSession,
+  onClearAllSessions,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const filteredSessions = sessions.filter(session => {
     if (!searchQuery.trim()) return true;
@@ -77,7 +80,7 @@ const SessionList: React.FC<SessionListProps> = ({
             + New Session
           </button>
 
-          <div className="mx-3 mb-3">
+          <div className="mx-3 mb-3 space-y-2">
             <div className="relative">
               <input
                 type="text"
@@ -95,6 +98,15 @@ const SessionList: React.FC<SessionListProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
+            
+            {sessions.length > 0 && onClearAllSessions && (
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="w-full px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+              >
+                Clear All Sessions
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -203,6 +215,34 @@ const SessionList: React.FC<SessionListProps> = ({
                 </div>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear All Sessions?</h3>
+            <p className="text-gray-600 mb-4">
+              This will permanently delete all {sessions.length} session{sessions.length !== 1 ? 's' : ''}. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onClearAllSessions?.();
+                  setShowClearConfirm(false);
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Clear All
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -262,6 +262,24 @@ async def delete_session(
         return Response(content=f"ERROR: {ex}", status_code=500)
 
 
+@router.delete("/sessions/delete-all")
+async def delete_all_sessions(
+    user_id: str = Query(...)
+):
+    """Delete all sessions for a user"""
+    try:
+        deleted_count = database_session_service.delete_all_sessions(user_id=user_id)
+        
+        import json
+        return Response(
+            content=json.dumps({"deleted_count": deleted_count, "message": f"Deleted {deleted_count} sessions"}),
+            status_code=200
+        )
+    except Exception as ex:
+        logging.error("Delete all sessions - ERROR: %s", str(ex))
+        return Response(content=f"ERROR: {ex}", status_code=500)
+
+
 @router.post("/export")
 async def export_video(
     video_path: str = Query(...),
