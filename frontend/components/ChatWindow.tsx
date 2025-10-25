@@ -151,90 +151,37 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
         
         if (shouldCreateRecommendation) {
           console.log('DEBUG: Found media or question in response');
-          console.log('DEBUG: applyingRecommendationIdRef.current:', applyingRecommendationIdRef.current);
           console.log('DEBUG: video_url:', data.media?.video_url);
           console.log('DEBUG: audio_urls:', data.media?.audio_urls);
           console.log('DEBUG: isQuestion:', isQuestion);
           console.log('DEBUG: hasMedia:', hasMedia);
           
-          if (applyingRecommendationIdRef.current && hasMedia) {
-            console.log('DEBUG: ===== ENTERING UPDATE EXISTING RECOMMENDATION BLOCK =====');
-            console.log('DEBUG: Updating existing recommendation:', applyingRecommendationIdRef.current);
-            console.log('DEBUG: currentSession:', currentSession);
-            console.log('DEBUG: data.media.video_url:', data.media.video_url);
-            
-            const recId = applyingRecommendationIdRef.current;
-            setRecommendations(prev => 
-              prev.map(rec => 
-                rec.id === recId 
-                  ? { ...rec, videoUrl: data.media.video_url, status: RecommendationStatus.ACCEPTED }
-                  : rec
-              )
-            );
-            
-            if (data.media.video_url) {
-              setApplyingRecommendationId(null);
-              applyingRecommendationIdRef.current = null;
-            }
-            
-            console.log('DEBUG: About to check video history condition');
-            console.log('DEBUG: currentSession exists:', !!currentSession);
-            console.log('DEBUG: data.media.video_url exists:', !!data.media.video_url);
-            
-            if (currentSession && data.media.video_url) {
-              console.log('DEBUG: ===== ADDING TO VIDEO HISTORY =====');
-              try {
-                await sessionService.createVersion(currentSession.pk, data.media.video_url);
-                console.log('DEBUG: Version snapshot created for applied recommendation');
-                console.log('DEBUG: Adding video to history:', data.media.video_url);
-                setVideoHistory(prev => {
-                  console.log('DEBUG: Previous history:', prev);
-                  const newHistory = [...prev, data.media.video_url];
-                  console.log('DEBUG: New history:', newHistory);
-                  return newHistory;
-                });
-                setCurrentVideoIndex(prev => {
-                  console.log('DEBUG: Previous index:', prev);
-                  const newIndex = prev + 1;
-                  console.log('DEBUG: New index:', newIndex);
-                  return newIndex;
-                });
-              } catch (error) {
-                console.error('Error creating version snapshot:', error);
-              }
-            } else {
-              console.log('DEBUG: ===== NOT ADDING TO VIDEO HISTORY =====');
-              console.log('DEBUG: Reason - currentSession:', currentSession, 'video_url:', data.media.video_url);
-            }
-            setIsProcessingRecommendation(false);
-          } else {
-            console.log('DEBUG: Creating new recommendation');
-            const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
-            const messageIndex = Math.max(0, filteredMessagesCount - 1);
-            console.log('DEBUG: messageIndex:', messageIndex);
-            const newRec: Recommendation = {
-              id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              title: data.media?.video_url ? 'Video Edit Recommendation' : (data.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
-              description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
-              status: RecommendationStatus.PENDING,
-              videoUrl: data.media?.video_url,
-              audioUrls: data.media?.audio_urls,
-              messageIndex: messageIndex,
-            };
-            console.log('DEBUG: Creating recommendation:', newRec);
-            console.log('DEBUG: newRec.audioUrls:', newRec.audioUrls);
-            setRecommendations(prevRecs => {
-              const isDuplicate = prevRecs.some(rec => {
-                const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
-                const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
-                const sameDesc = rec.description === newRec.description;
-                console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
-                return sameDesc && (sameVideo || sameAudio);
-              });
-              console.log('DEBUG: isDuplicate:', isDuplicate);
-              return isDuplicate ? prevRecs : [...prevRecs, newRec];
+          console.log('DEBUG: Creating new recommendation');
+          const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+          const messageIndex = Math.max(0, filteredMessagesCount - 1);
+          console.log('DEBUG: messageIndex:', messageIndex);
+          const newRec: Recommendation = {
+            id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            title: data.media?.video_url ? 'Video Edit Recommendation' : (data.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
+            description: data.text.substring(0, 100) + (data.text.length > 100 ? '...' : ''),
+            status: RecommendationStatus.PENDING,
+            videoUrl: data.media?.video_url,
+            audioUrls: data.media?.audio_urls,
+            messageIndex: messageIndex,
+          };
+          console.log('DEBUG: Creating recommendation:', newRec);
+          console.log('DEBUG: newRec.audioUrls:', newRec.audioUrls);
+          setRecommendations(prevRecs => {
+            const isDuplicate = prevRecs.some(rec => {
+              const sameVideo = rec.videoUrl === newRec.videoUrl && rec.videoUrl !== undefined;
+              const sameAudio = JSON.stringify(rec.audioUrls) === JSON.stringify(newRec.audioUrls) && rec.audioUrls !== undefined;
+              const sameDesc = rec.description === newRec.description;
+              console.log('DEBUG: Checking duplicate against rec:', rec.id, { sameVideo, sameAudio, sameDesc, recStatus: rec.status });
+              return sameDesc && (sameVideo || sameAudio);
             });
-          }
+            console.log('DEBUG: isDuplicate:', isDuplicate);
+            return isDuplicate ? prevRecs : [...prevRecs, newRec];
+          });
         }
       } else if (typeof data === 'string') {
         try {
@@ -251,50 +198,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
             const shouldCreateRecommendation = hasMedia || isQuestion;
             
             if (shouldCreateRecommendation) {
-              if (applyingRecommendationIdRef.current && hasMedia) {
-                const recId = applyingRecommendationIdRef.current;
-                setRecommendations(prev => 
-                  prev.map(rec => 
-                    rec.id === recId 
-                      ? { ...rec, videoUrl: parsedData.media.video_url, status: RecommendationStatus.ACCEPTED }
-                      : rec
-                  )
+              const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+              const messageIndex = Math.max(0, filteredMessagesCount - 1);
+              const newRec: Recommendation = {
+                id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: parsedData.media?.video_url ? 'Video Edit Recommendation' : (parsedData.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
+                description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
+                status: RecommendationStatus.PENDING,
+                videoUrl: parsedData.media?.video_url,
+                audioUrls: parsedData.media?.audio_urls,
+                messageIndex: messageIndex,
+              };
+              setRecommendations(prev => {
+                const isDuplicate = prev.some(rec => 
+                  rec.videoUrl === newRec.videoUrl && 
+                  rec.description === newRec.description &&
+                  rec.status === RecommendationStatus.PENDING
                 );
-                setApplyingRecommendationId(null);
-                applyingRecommendationIdRef.current = null;
-                
-                if (currentSession && parsedData.media.video_url) {
-                  try {
-                    await sessionService.createVersion(currentSession.pk, parsedData.media.video_url);
-                    console.log('Version snapshot created for applied recommendation');
-                    setVideoHistory(prev => [...prev, parsedData.media.video_url]);
-                    setCurrentVideoIndex(prev => prev + 1);
-                  } catch (error) {
-                    console.error('Error creating version snapshot:', error);
-                  }
-                }
-                setIsProcessingRecommendation(false);
-              } else {
-                const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
-                const messageIndex = Math.max(0, filteredMessagesCount - 1);
-                const newRec: Recommendation = {
-                  id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                  title: parsedData.media?.video_url ? 'Video Edit Recommendation' : (parsedData.media?.audio_urls ? 'Audio Recommendation' : 'Text Recommendation'),
-                  description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
-                  status: RecommendationStatus.PENDING,
-                  videoUrl: parsedData.media?.video_url,
-                  audioUrls: parsedData.media?.audio_urls,
-                  messageIndex: messageIndex,
-                };
-                setRecommendations(prev => {
-                  const isDuplicate = prev.some(rec => 
-                    rec.videoUrl === newRec.videoUrl && 
-                    rec.description === newRec.description &&
-                    rec.status === RecommendationStatus.PENDING
-                  );
-                  return isDuplicate ? prev : [...prev, newRec];
-                });
-              }
+                return isDuplicate ? prev : [...prev, newRec];
+              });
             }
           } else {
             botMessage = { role: Role.MODEL, text: data };
@@ -322,6 +244,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
     console.log('DEBUG: handleAcceptRecommendation called for:', recommendationId);
     console.log('DEBUG: Recommendation:', recommendation);
     
+    const messageIndex = recommendation?.messageIndex ?? -1;
+    const relatedMessage = messageIndex >= 0 ? filteredMessages[messageIndex] : null;
+    const isQuestion = relatedMessage?.text?.trim().endsWith('?') ?? false;
+    
+    console.log('DEBUG: messageIndex:', messageIndex);
+    console.log('DEBUG: relatedMessage:', relatedMessage);
+    console.log('DEBUG: isQuestion:', isQuestion);
+    
     setRecommendations(prev => 
       prev.map(rec => 
         rec.id === recommendationId 
@@ -330,29 +260,63 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
       )
     );
     
-    if (recommendation?.audioUrls && !recommendation.videoUrl) {
-      console.log('DEBUG: Setting applyingRecommendationId to:', recommendationId);
+    if (isQuestion) {
+      console.log('DEBUG: Question detected, calling backend to apply change');
       setApplyingRecommendationId(recommendationId);
       applyingRecommendationIdRef.current = recommendationId;
-      await handleSendMessage("Yes, please do that.");
+      
+      try {
+        const { data } = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
+          query: "Yes, please apply that change.",
+          feature_id: featureToEdit?.id,
+        });
+        
+        console.log('DEBUG: Backend response after accepting:', data);
+        
+        if (data.media?.video_url) {
+          setRecommendations(prev => 
+            prev.map(rec => 
+              rec.id === recommendationId 
+                ? { ...rec, videoUrl: data.media.video_url, status: RecommendationStatus.ACCEPTED }
+                : rec
+            )
+          );
+          
+          if (currentSession) {
+            try {
+              await sessionService.createVersion(currentSession.pk, data.media.video_url);
+              setVideoHistory(prev => [...prev, data.media.video_url]);
+              setCurrentVideoIndex(prev => prev + 1);
+            } catch (error) {
+              console.error('Error creating version snapshot:', error);
+            }
+          }
+          
+          const followUpMessage: MessageType = { 
+            role: Role.MODEL, 
+            text: "Great! I've applied the changes. Is there anything else you'd like me to adjust?"
+          };
+          setMessages(prev => [...prev, followUpMessage]);
+          
+          setApplyingRecommendationId(null);
+          applyingRecommendationIdRef.current = null;
+        }
+      } catch (error) {
+        console.error('Error applying recommendation:', error);
+        setRecommendations(prev => 
+          prev.map(rec => 
+            rec.id === recommendationId 
+              ? { ...rec, status: RecommendationStatus.PENDING }
+              : rec
+          )
+        );
+      } finally {
+        setIsProcessingRecommendation(false);
+      }
+      
       return;
     }
     
-    if (!recommendation?.audioUrls && !recommendation?.videoUrl) {
-      setApplyingRecommendationId(recommendationId);
-      applyingRecommendationIdRef.current = recommendationId;
-      await handleSendMessage("Yes, please do that.");
-      return;
-    }
-    
-    setRecommendations(prev => 
-      prev.map(rec => 
-        rec.id === recommendationId 
-          ? { ...rec, status: RecommendationStatus.ACCEPTED }
-          : rec
-      )
-    );
-
     if (currentSession && recommendation?.videoUrl) {
       try {
         await sessionService.createVersion(currentSession.pk, recommendation.videoUrl);
@@ -360,6 +324,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
         
         setVideoHistory(prev => [...prev, recommendation.videoUrl!]);
         setCurrentVideoIndex(prev => prev + 1);
+        
+        setRecommendations(prev => 
+          prev.map(rec => 
+            rec.id === recommendationId 
+              ? { ...rec, status: RecommendationStatus.ACCEPTED }
+              : rec
+          )
+        );
       } catch (error) {
         console.error('Error creating version snapshot:', error);
       }

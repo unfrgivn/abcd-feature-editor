@@ -15,10 +15,11 @@ interface MessageProps {
 
 const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptRecommendation, onRejectRecommendation }) => {
   const isUser = message.role === Role.USER;
-  const isPending = !isUser && recommendation?.status === RecommendationStatus.PENDING;
-  const isProcessing = !isUser && recommendation?.status === RecommendationStatus.PROCESSING;
   const isAccepted = !isUser && recommendation?.status === RecommendationStatus.ACCEPTED;
-  const isRejected = !isUser && recommendation?.status === RecommendationStatus.REJECTED;
+  const activeRecommendation = isAccepted ? undefined : recommendation;
+  const isPending = !isUser && activeRecommendation?.status === RecommendationStatus.PENDING;
+  const isProcessing = !isUser && activeRecommendation?.status === RecommendationStatus.PROCESSING;
+  const isRejected = !isUser && activeRecommendation?.status === RecommendationStatus.REJECTED;
 
   const containerClasses = isUser ? 'flex justify-end' : 'flex justify-start';
   
@@ -30,10 +31,10 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
     bubbleClasses = 'bg-blue-50 border border-blue-200 text-gray-900 rounded-2xl shadow-sm';
   } else if (isProcessing) {
     bubbleClasses = 'bg-amber-50 border border-amber-200 text-gray-900 rounded-2xl shadow-sm';
-  } else if (isAccepted) {
-    bubbleClasses = 'bg-green-50 border border-green-300 text-gray-900 rounded-2xl shadow-sm';
   } else if (isRejected) {
     bubbleClasses = 'bg-red-50 border border-red-200 text-gray-900 rounded-2xl shadow-sm';
+  } else if (isAccepted) {
+    bubbleClasses = 'bg-green-50 border border-green-200 text-gray-900 rounded-2xl shadow-sm';
   }
   
   const icon = isUser ? <UserIcon /> : <BotIcon />;
@@ -65,6 +66,12 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
         <div className="flex flex-col space-y-3 flex-1">
           {message.text.trim() && (
             <div className={`px-4 py-3 ${bubbleClasses}`}>
+              {isAccepted && (
+                <div className="flex items-center space-x-2 mb-2">
+                  <CheckIcon />
+                  <span className="text-xs font-semibold text-green-700 uppercase">Accepted</span>
+                </div>
+              )}
               {isProcessing && (
                 <div className="flex items-center space-x-2 mb-2">
                   <svg className="animate-spin h-4 w-4 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -72,12 +79,6 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                   <span className="text-xs font-semibold text-amber-700 uppercase">Processing...</span>
-                </div>
-              )}
-              {isAccepted && (
-                <div className="flex items-center space-x-2 mb-2">
-                  <CheckIcon />
-                  <span className="text-xs font-semibold text-green-700 uppercase">Applied Change</span>
                 </div>
               )}
               {isRejected && (
@@ -88,7 +89,7 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
               )}
               <p className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={formatText(message.text)}></p>
               {recommendation?.audioUrls && recommendation.audioUrls.length > 0 && (isPending || isProcessing) && (
-                <div className="mt-3 space-y-2 pt-3 border-t border-blue-300">
+                <div className={`mt-3 space-y-2 pt-3 border-t ${isProcessing ? 'border-amber-300' : 'border-blue-300'}`}>
                   <p className="text-xs font-medium text-gray-600 uppercase">Audio Preview</p>
                   {recommendation.audioUrls.map((audioUrl, index) => (
                     <div key={index}>

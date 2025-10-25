@@ -294,7 +294,13 @@ USER QUERY: {query}
             
             print(f"DEBUG agent.py: has_audio={has_audio}, has_new_video={has_new_video}")
             
-            if has_new_video:
+            if has_audio and has_new_video:
+                media_assets['video_url'] = session.state['edited_video_url']
+                print(f"DEBUG agent.py: Both audio and video present - sending video_url: {media_assets['video_url']}")
+                del session.state['edited_video_url']
+                session.state['audio_urls'] = []
+                print(f"DEBUG agent.py: Cleared both edited_video_url and audio_urls from session state")
+            elif has_new_video:
                 media_assets['video_url'] = session.state['edited_video_url']
                 print(f"DEBUG agent.py: Setting video_url in media_assets: {media_assets['video_url']}")
                 del session.state['edited_video_url']
