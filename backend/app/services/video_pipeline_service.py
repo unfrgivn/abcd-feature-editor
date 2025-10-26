@@ -14,27 +14,34 @@ logger = logging.getLogger(__name__)
 class VideoPipelineService:
     
     def apply_edit_queue(self, edit_queue: EditQueue) -> str:
-        current_video_url = edit_queue.current_video_url
-        
         applied_edits = edit_queue.get_applied_edits()
-        new_edits = [e for e in applied_edits if not e.result_video_url]
         
-        if new_edits:
-            logger.info(f"Applying {len(new_edits)} new edits to video (starting from current version)")
+        has_overwritten_edits = any(e.status == "overwritten" for e in edit_queue.edits)
+        needs_rebuild = any(e.result_video_url is None for e in applied_edits)
+        
+        if has_overwritten_edits or needs_rebuild:
+            logger.info(f"Full rebuild required (overwritten={has_overwritten_edits}, needs_rebuild={needs_rebuild})")
+            
+            for edit in edit_queue.edits:
+                edit.result_video_url = None
+            
+            current_video_url = edit_queue.original_video_url
+            
+            logger.info(f"Rebuilding video from original with {len(applied_edits)} applied edits")
+            for edit in applied_edits:
+                try:
+                    current_video_url = self.apply_single_edit(current_video_url, edit)
+                    edit.result_video_url = current_video_url
+                    logger.info(f"Applied edit {edit.id} ({edit.type})")
+                except Exception as e:
+                    logger.error(f"Error applying edit {edit.id}: {e}")
+                    raise
+            
+            edit_queue.current_video_url = current_video_url
         else:
-            logger.info(f"No new edits to apply")
-            return current_video_url
+            logger.info(f"No changes needed, returning current video")
+            current_video_url = edit_queue.current_video_url
         
-        for edit in new_edits:
-            try:
-                current_video_url = self.apply_single_edit(current_video_url, edit)
-                edit.result_video_url = current_video_url
-                logger.info(f"Applied edit {edit.id} ({edit.type})")
-            except Exception as e:
-                logger.error(f"Error applying edit {edit.id}: {e}")
-                raise
-        
-        edit_queue.current_video_url = current_video_url
         return current_video_url
     
     def apply_single_edit(self, video_url: str, edit: Edit) -> str:

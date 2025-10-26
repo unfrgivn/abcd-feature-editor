@@ -33,6 +33,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
   const [videoHistory, setVideoHistory] = useState<string[]>([]);
   const [applyingRecommendationId, setApplyingRecommendationId] = useState<string | null>(null);
   const [editQueue, setEditQueue] = useState<EditQueueType | null>(null);
+  const [isEditSidebarOpen, setIsEditSidebarOpen] = useState<boolean>(false);
+  const [editQueuePulse, setEditQueuePulse] = useState<boolean>(false);
+  const [isEditOperationLoading, setIsEditOperationLoading] = useState<boolean>(false);
   const applyingRecommendationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef<boolean>(false);
@@ -78,7 +81,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
       });
       
       if (response.data) {
+        const prevEditCount = editQueue?.edits?.length || 0;
+        const newEditCount = response.data?.edits?.length || 0;
+        
+        console.log('DEBUG ChatWindow: Fetched edit queue:', response.data);
+        console.log('DEBUG ChatWindow: Edit count:', newEditCount);
+        console.log('DEBUG ChatWindow: Edits:', response.data.edits?.map((e: any) => ({
+          id: e.id,
+          type: e.type,
+          status: e.status
+        })));
+        
         setEditQueue(response.data);
+        
+        if (newEditCount > prevEditCount) {
+          setEditQueuePulse(true);
+          setTimeout(() => setEditQueuePulse(false), 2000);
+        }
       }
     } catch (error) {
       console.error('Error fetching edit queue:', error);
@@ -236,29 +255,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
             const hasAudioUrls = parsedData.media?.audio_urls;
             const isQuestion = parsedData.text.trim().endsWith('?');
             
-            if (hasAudioUrls || isQuestion) {
-              const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
-              const messageIndex = filteredMessagesCount;
-              const newRec: Recommendation = {
-                id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: hasAudioUrls ? 'Audio Recommendation' : 'Text Recommendation',
-                description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
-                status: RecommendationStatus.PENDING,
-                videoUrl: parsedData.media?.video_url,
-                audioUrls: parsedData.media?.audio_urls,
-                messageIndex: messageIndex,
-              };
-              setRecommendations(prev => {
-                const isDuplicate = prev.some(rec => 
-                  rec.videoUrl === newRec.videoUrl && 
-                  rec.description === newRec.description &&
-                  rec.status === RecommendationStatus.PENDING
-                );
-                return isDuplicate ? prev : [...prev, newRec];
+            if (hasVideoUrl) {
+              setVideoHistory(prev => {
+                const newHistory = [...prev, parsedData.media.video_url];
+                setCurrentVideoIndex(newHistory.length - 1);
+                return newHistory;
               });
-            } else if (hasVideoUrl) {
-              setVideoHistory(prev => [...prev, parsedData.media.video_url]);
-              setCurrentVideoIndex(prev => prev + 1);
               
               const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
               const messageIndex = filteredMessagesCount;
@@ -279,6 +281,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                   console.error('Error creating version snapshot:', error);
                 }
               }
+            } else if (hasAudioUrls || isQuestion) {
+              const filteredMessagesCount = messages.filter(msg => msg.text !== INITIAL_MESSAGE).length;
+              const messageIndex = filteredMessagesCount;
+              const newRec: Recommendation = {
+                id: `rec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: hasAudioUrls ? 'Audio Recommendation' : 'Text Recommendation',
+                description: parsedData.text.substring(0, 100) + (parsedData.text.length > 100 ? '...' : ''),
+                status: RecommendationStatus.PENDING,
+                videoUrl: parsedData.media?.video_url,
+                audioUrls: parsedData.media?.audio_urls,
+                messageIndex: messageIndex,
+              };
+              setRecommendations(prev => {
+                const isDuplicate = prev.some(rec => 
+                  rec.videoUrl === newRec.videoUrl && 
+                  rec.description === newRec.description &&
+                  rec.status === RecommendationStatus.PENDING
+                );
+                return isDuplicate ? prev : [...prev, newRec];
+              });
             }
           } else {
             botMessage = { role: Role.MODEL, text: data };
@@ -466,6 +488,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
   const handleRemoveEdit = async (editId: string) => {
     if (!currentSession) return;
     
+    setIsEditOperationLoading(true);
+    
+    const botMessage: MessageType = { 
+      role: Role.MODEL, 
+      text: 'Removing that edit and regenerating the video...'
+    };
+    setMessages(prev => [...prev, botMessage]);
+    
     try {
       const response = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
         query: `Remove edit with ID ${editId}`,
@@ -476,15 +506,177 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
       
       console.log('Edit removed:', response.data);
       
-      fetchEditQueue();
+      await fetchEditQueue();
       
-      if (response.data.media?.video_url) {
-        setVideoHistory(prev => [...prev, response.data.media.video_url]);
-        setCurrentVideoIndex(prev => prev + 1);
+      const isError = response.data.text?.toLowerCase().includes('error') || 
+                      response.data.text?.toLowerCase().includes('not found');
+      
+      if (isError) {
+        const errorMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: response.data.text || 'Sorry, I encountered an error while removing that edit. Please try again.',
+        };
+        setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+      } else if (response.data.media?.video_url) {
+        setVideoHistory(prev => {
+          const newHistory = [...prev, response.data.media.video_url];
+          setCurrentVideoIndex(newHistory.length - 1);
+          return newHistory;
+        });
+        
+        const successMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: 'The edit has been removed and the video has been updated.',
+          media: { video_url: response.data.media.video_url },
+          isEditQueueSuccess: true
+        };
+        setMessages(prev => [...prev.slice(0, -1), successMessage]);
+      } else {
+        const successMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: 'The edit has been removed from the queue.',
+        };
+        setMessages(prev => [...prev.slice(0, -1), successMessage]);
       }
     } catch (error) {
       console.error('Error removing edit:', error);
-      alert('Failed to remove edit. Please try again.');
+      const errorMessage: MessageType = { 
+        role: Role.MODEL, 
+        text: 'Sorry, I encountered an error while removing that edit. Please try again.',
+      };
+      setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+    } finally {
+      setIsEditOperationLoading(false);
+    }
+  };
+
+  const handleReactivateEdit = async (editId: string) => {
+    if (!currentSession) return;
+    
+    setIsEditOperationLoading(true);
+    
+    const botMessage: MessageType = { 
+      role: Role.MODEL, 
+      text: 'Reactivating that edit and regenerating the video...'
+    };
+    setMessages(prev => [...prev, botMessage]);
+    
+    try {
+      const response = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
+        query: `Reactivate edit with ID ${editId}`,
+        feature_id: featureToEdit?.id,
+        user_id: userId,
+        session_id: currentSession?.session_id,
+      });
+      
+      console.log('Edit reactivated:', response.data);
+      
+      await fetchEditQueue();
+      
+      const isError = response.data.text?.toLowerCase().includes('error') || 
+                      response.data.text?.toLowerCase().includes('not found');
+      
+      if (isError) {
+        const errorMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: response.data.text || 'Sorry, I encountered an error while reactivating that edit. Please try again.',
+        };
+        setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+      } else if (response.data.media?.video_url) {
+        setVideoHistory(prev => {
+          const newHistory = [...prev, response.data.media.video_url];
+          setCurrentVideoIndex(newHistory.length - 1);
+          return newHistory;
+        });
+        
+        const successMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: 'The edit has been reactivated and the video has been updated.',
+          media: { video_url: response.data.media.video_url },
+          isEditQueueSuccess: true
+        };
+        setMessages(prev => [...prev.slice(0, -1), successMessage]);
+      } else {
+        const successMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: 'The edit has been reactivated.',
+        };
+        setMessages(prev => [...prev.slice(0, -1), successMessage]);
+      }
+    } catch (error) {
+      console.error('Error reactivating edit:', error);
+      const errorMessage: MessageType = { 
+        role: Role.MODEL, 
+        text: 'Sorry, I encountered an error while reactivating that edit. Please try again.',
+      };
+      setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+    } finally {
+      setIsEditOperationLoading(false);
+    }
+  };
+
+  const handleDeactivateEdit = async (editId: string) => {
+    if (!currentSession) return;
+    
+    setIsEditOperationLoading(true);
+    
+    const botMessage: MessageType = { 
+      role: Role.MODEL, 
+      text: 'Deactivating that edit and regenerating the video...'
+    };
+    setMessages(prev => [...prev, botMessage]);
+    
+    try {
+      const response = await axios.post(`http://127.0.0.1:8000/api/call_ai_editor_agent`, {
+        query: `Deactivate edit with ID ${editId}`,
+        feature_id: featureToEdit?.id,
+        user_id: userId,
+        session_id: currentSession?.session_id,
+      });
+      
+      console.log('Edit deactivated:', response.data);
+      
+      await fetchEditQueue();
+      
+      const isError = response.data.text?.toLowerCase().includes('error') || 
+                      response.data.text?.toLowerCase().includes('not found');
+      
+      if (isError) {
+        const errorMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: response.data.text || 'Sorry, I encountered an error while deactivating that edit. Please try again.',
+        };
+        setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+      } else if (response.data.media?.video_url) {
+        setVideoHistory(prev => {
+          const newHistory = [...prev, response.data.media.video_url];
+          setCurrentVideoIndex(newHistory.length - 1);
+          return newHistory;
+        });
+        
+        const successMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: 'The edit has been deactivated and the video has been updated.',
+          media: { video_url: response.data.media.video_url },
+          isEditQueueSuccess: true
+        };
+        setMessages(prev => [...prev.slice(0, -1), successMessage]);
+      } else {
+        const successMessage: MessageType = { 
+          role: Role.MODEL, 
+          text: 'The edit has been deactivated.',
+        };
+        setMessages(prev => [...prev.slice(0, -1), successMessage]);
+      }
+    } catch (error) {
+      console.error('Error deactivating edit:', error);
+      const errorMessage: MessageType = { 
+        role: Role.MODEL, 
+        text: 'Sorry, I encountered an error while deactivating that edit. Please try again.',
+      };
+      setMessages(prev => [...prev.slice(0, -1), errorMessage]);
+    } finally {
+      setIsEditOperationLoading(false);
     }
   };
 
@@ -575,6 +767,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
     return `Version ${currentVideoIndex}`;
   };
 
+  const activeEditCount = useMemo(() => {
+    return editQueue?.edits?.filter(edit => edit.status === 'applied').length || 0;
+  }, [editQueue]);
+
   const getCombinedTimeline = useMemo(() => {
     console.log('DEBUG getCombinedTimeline: messages.length=', messages.length);
     console.log('DEBUG getCombinedTimeline: filteredMessages.length=', filteredMessages.length);
@@ -628,17 +824,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           <div className="p-4 overflow-y-auto flex-1">
             <div className="mb-4">
               <div className="relative">
-                {isProcessingRecommendation && currentVideoIndex === videoHistory.length - 1 && (
+                {(isProcessingRecommendation && currentVideoIndex === videoHistory.length - 1) || isEditOperationLoading ? (
                   <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center z-10">
                     <div className="text-white text-sm font-medium flex items-center space-x-2">
                       <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      <span>Processing...</span>
+                      <span>{isEditOperationLoading ? 'Updating video...' : 'Processing...'}</span>
                     </div>
                   </div>
-                )}
+                ) : null}
                 <ResponsiveVideoPlayer url={getCurrentVideoUrl()} key={getCurrentVideoUrl()} />
               </div>
               
@@ -712,6 +908,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                 <p className="text-xs text-gray-900">{featureToEdit.detected || 'Sep 26, 2025'}</p>
               </div>
             </div>
+            
+            {currentSession && (
+              <div className="mt-4">
+                <VersionHistory 
+                  sessionPk={currentSession.pk}
+                  onRollback={(versionId, videoUrl) => {
+                    console.log('Rollback to version:', versionId, videoUrl);
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -744,6 +951,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </button>
+              <button 
+                onClick={() => setIsEditSidebarOpen(!isEditSidebarOpen)}
+                className={`relative p-2 rounded-lg transition-colors ${isEditSidebarOpen ? 'bg-blue-50 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                title="Edit History"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                {activeEditCount > 0 && (
+                  <span className={`absolute -top-1 -right-1 bg-green-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center ${editQueuePulse ? 'animate-pulse' : ''}`}>
+                    {activeEditCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -765,19 +986,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-            </div>
-          )}
-          
-          <EditQueue editQueue={editQueue} onRemoveEdit={handleRemoveEdit} />
-          
-          {currentSession && (
-            <div className="mb-6">
-              <VersionHistory 
-                sessionPk={currentSession.pk}
-                onRollback={(versionId, videoUrl) => {
-                  console.log('Rollback to version:', versionId, videoUrl);
-                }}
-              />
             </div>
           )}
           
@@ -826,6 +1034,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ featureToEdit, onClose, current
           )}
         </div>
       </div>
+
+      {isEditSidebarOpen && (
+        <div className="w-96 border-l border-gray-200 flex flex-col flex-shrink-0 bg-white">
+          <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <div className="text-xs text-gray-500 uppercase mb-1">Edit History</div>
+              <h3 className="text-sm font-semibold text-gray-900">
+                {activeEditCount} Active {activeEditCount === 1 ? 'Edit' : 'Edits'}
+              </h3>
+            </div>
+            <button 
+              onClick={() => setIsEditSidebarOpen(false)}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+            >
+              <XIcon className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4">
+            <EditQueue 
+              editQueue={editQueue} 
+              onRemoveEdit={handleRemoveEdit}
+              onReactivateEdit={handleReactivateEdit}
+              onDeactivateEdit={handleDeactivateEdit}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

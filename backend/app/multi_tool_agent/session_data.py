@@ -27,10 +27,13 @@ def initialize_session_data(app_name: str, user_id: str, session_id: str, servic
 def set_frontend_session_info(user_id: str, session_id: str, db_session_service):
     """Set frontend session info to use database session service for edit queue."""
     global FRONTEND_USER_ID, FRONTEND_SESSION_ID, frontend_session_service
+    
+    session_changed = (FRONTEND_USER_ID != user_id or FRONTEND_SESSION_ID != session_id)
+    
     FRONTEND_USER_ID = user_id
     FRONTEND_SESSION_ID = session_id
     frontend_session_service = db_session_service
-    print(f"DEBUG session_data.py: Set frontend session info - user_id={user_id}, session_id={session_id}")
+    print(f"DEBUG session_data.py: Set frontend session info - user_id={user_id}, session_id={session_id}, session_changed={session_changed}")
 
 
 def _get_active_session_info():
@@ -118,6 +121,11 @@ def save_edit_queue(edit_queue: EditQueue) -> None:
     """Save the edit queue to the session state."""
     user_id, session_id, service, is_frontend = _get_active_session_info()
     
+    queue_dict = edit_queue.to_dict()
+    print(f"DEBUG session_data.py: Saving edit queue with {len(queue_dict.get('edits', []))} edits")
+    for e in queue_dict.get('edits', []):
+        print(f"  Edit {e['id']}: type={e['type']}, status={e['status']}")
+    
     if is_frontend:
         session = service.get_session(
             app_name=APP_NAME,
@@ -125,11 +133,11 @@ def save_edit_queue(edit_queue: EditQueue) -> None:
             session_id=session_id
         )
         if session:
-            service.set_state(session["pk"], "edit_queue", edit_queue.to_dict())
+            service.set_state(session["pk"], "edit_queue", queue_dict)
             print(f"DEBUG session_data.py: Saved edit queue to database for {user_id}/{session_id}")
         return
     
-    set_session_data("edit_queue", edit_queue.to_dict())
+    set_session_data("edit_queue", queue_dict)
 
 
 def initialize_edit_queue(original_video_url: str) -> EditQueue:

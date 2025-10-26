@@ -1,0 +1,11 @@
+INFO:services.database_session_service:Database initialized at /Users/bash/Sites/wpromote/hackathons/google-2025-10-21/google-prototype/backend/app/data/sessions.db
+INFO:core.env_validation:Environment validation passed
+INFO:     Will watch for changes in these directories: ['/Users/bash/Sites/wpromote/hackathons/google-2025-10-21/google-prototype/backend/app']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [30855] using WatchFiles
+INFO:services.database_session_service:Database initialized at /Users/bash/Sites/wpromote/hackathons/google-2025-10-21/google-prototype/backend/app/multi_tool_agent/../data/sessions.db
+INFO:core.env_validation:Environment validation passed
+INFO:core.env_validation:Environment validation passed
+INFO:     Started server process [31176]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

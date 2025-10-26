@@ -162,6 +162,11 @@ def add_text_overlay_edit(
         if not edit_queue:
             edit_queue = initialize_edit_queue(original_video_url)
         
+        for existing_edit in edit_queue.edits:
+            if existing_edit.type == "text_overlay" and existing_edit.status == "applied":
+                existing_edit.status = "overwritten"
+                logger.info(f"Marked text overlay edit {existing_edit.id} as overwritten")
+        
         edit = Edit(
             id=str(uuid.uuid4()),
             type="text_overlay",
@@ -179,9 +184,15 @@ def add_text_overlay_edit(
         
         edit_queue.add_edit(edit)
         
+        logger.info(f"DEBUG: Edit queue before save has {len(edit_queue.edits)} total edits")
+        for e in edit_queue.edits:
+            logger.info(f"  Edit {e.id}: type={e.type}, status={e.status}")
+        
         result_video_url = video_pipeline_service.apply_edit_queue(edit_queue)
         
         save_edit_queue(edit_queue)
+        
+        logger.info(f"DEBUG: Edit queue after save has {len(edit_queue.edits)} total edits")
         
         tool_context.state["edited_video_url"] = result_video_url
         logger.info(f"Set edited_video_url in tool_context.state: {result_video_url}")
@@ -202,14 +213,14 @@ def add_text_overlay_edit(
 
 def remove_edit(tool_context, edit_id: str) -> Dict[str, Any]:
     """
-    Remove an edit from the queue and regenerate the video.
+    Remove an edit from the queue and regenerate the video if needed.
     
     Args:
         tool_context: Agent tool context containing state
         edit_id: ID of the edit to remove
     
     Returns:
-        Dictionary with status, message, and video_url
+        Dictionary with status, message, and video_url (only if video changed)
     """
     try:
         edit_queue = get_edit_queue()
@@ -219,6 +230,15 @@ def remove_edit(tool_context, edit_id: str) -> Dict[str, Any]:
                 "message": "No edit queue found"
             }
         
+        edit_to_remove = edit_queue.get_edit(edit_id)
+        if not edit_to_remove:
+            return {
+                "status": "error",
+                "message": f"Edit {edit_id} not found"
+            }
+        
+        was_applied = edit_to_remove.status == "applied"
+        
         success = edit_queue.remove_edit(edit_id)
         if not success:
             return {
@@ -226,22 +246,31 @@ def remove_edit(tool_context, edit_id: str) -> Dict[str, Any]:
                 "message": f"Edit {edit_id} not found"
             }
         
-        edit_queue.current_video_url = edit_queue.original_video_url
-        for edit in edit_queue.edits:
-            edit.result_video_url = None
-        
-        result_video_url = video_pipeline_service.apply_edit_queue(edit_queue)
-        
-        save_edit_queue(edit_queue)
-        
-        tool_context.state["edited_video_url"] = result_video_url
-        logger.info(f"Set edited_video_url in tool_context.state: {result_video_url}")
-        
-        return {
-            "status": "success",
-            "message": "Edit removed successfully",
-            "video_url": result_video_url
-        }
+        if was_applied:
+            edit_queue.current_video_url = edit_queue.original_video_url
+            for edit in edit_queue.edits:
+                edit.result_video_url = None
+            
+            result_video_url = video_pipeline_service.apply_edit_queue(edit_queue)
+            
+            save_edit_queue(edit_queue)
+            
+            tool_context.state["edited_video_url"] = result_video_url
+            logger.info(f"Set edited_video_url in tool_context.state: {result_video_url}")
+            
+            return {
+                "status": "success",
+                "message": "Edit removed and video regenerated",
+                "video_url": result_video_url
+            }
+        else:
+            save_edit_queue(edit_queue)
+            logger.info(f"Removed inactive edit {edit_id} without regenerating video")
+            
+            return {
+                "status": "success",
+                "message": "Inactive edit removed from queue (no video changes)",
+            }
     except Exception as e:
         logger.error(f"Error removing edit: {e}")
         return {
@@ -312,3 +341,122 @@ def find_voiceover_edit() -> Dict[str, Any]:
             "status": "error",
             "message": str(e)
         }
+
+
+def reactivate_edit(tool_context, edit_id: str) -> Dict[str, Any]:
+    """
+    Reactivate a reverted or overwritten edit and regenerate the video.
+    
+    Args:
+        tool_context: Agent tool context containing state
+        edit_id: ID of the edit to reactivate
+    
+    Returns:
+        Dictionary with status, message, and video_url
+    """
+    try:
+        edit_queue = get_edit_queue()
+        if not edit_queue:
+            return {
+                "status": "error",
+                "message": "No edit queue found"
+            }
+        
+        edit = edit_queue.get_edit(edit_id)
+        if not edit:
+            return {
+                "status": "error",
+                "message": f"Edit {edit_id} not found"
+            }
+        
+        if edit.status not in ["reverted", "overwritten", "superseded"]:
+            return {
+                "status": "error",
+                "message": f"Cannot reactivate edit with status '{edit.status}'"
+            }
+        
+        edit.status = "applied"
+        edit.timestamp = datetime.now().isoformat()
+        
+        edit_queue.current_video_url = edit_queue.original_video_url
+        for e in edit_queue.edits:
+            e.result_video_url = None
+        
+        result_video_url = video_pipeline_service.apply_edit_queue(edit_queue)
+        
+        save_edit_queue(edit_queue)
+        
+        tool_context.state["edited_video_url"] = result_video_url
+        logger.info(f"Set edited_video_url in tool_context.state: {result_video_url}")
+        
+        return {
+            "status": "success",
+            "message": f"Edit reactivated successfully",
+            "video_url": result_video_url
+        }
+    except Exception as e:
+        logger.error(f"Error reactivating edit: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+def deactivate_edit(tool_context, edit_id: str) -> Dict[str, Any]:
+    """
+    Deactivate an applied edit by changing its status to 'reverted' and regenerate the video.
+    
+    Args:
+        tool_context: Agent tool context containing state
+        edit_id: ID of the edit to deactivate
+    
+    Returns:
+        Dictionary with status, message, and video_url
+    """
+    try:
+        edit_queue = get_edit_queue()
+        if not edit_queue:
+            return {
+                "status": "error",
+                "message": "No edit queue found"
+            }
+        
+        edit = edit_queue.get_edit(edit_id)
+        if not edit:
+            return {
+                "status": "error",
+                "message": f"Edit {edit_id} not found"
+            }
+        
+        if edit.status != "applied":
+            return {
+                "status": "error",
+                "message": f"Cannot deactivate edit with status '{edit.status}'"
+            }
+        
+        edit.status = "reverted"
+        edit.timestamp = datetime.now().isoformat()
+        
+        edit_queue.current_video_url = edit_queue.original_video_url
+        for e in edit_queue.edits:
+            e.result_video_url = None
+        
+        result_video_url = video_pipeline_service.apply_edit_queue(edit_queue)
+        
+        save_edit_queue(edit_queue)
+        
+        tool_context.state["edited_video_url"] = result_video_url
+        logger.info(f"Set edited_video_url in tool_context.state: {result_video_url}")
+        
+        return {
+            "status": "success",
+            "message": f"Edit deactivated successfully",
+            "video_url": result_video_url
+        }
+    except Exception as e:
+        logger.error(f"Error deactivating edit: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+

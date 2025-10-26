@@ -32,6 +32,8 @@ from multi_tool_agent.edit_queue_tools import (
     remove_edit,
     get_edit_queue_info,
     find_voiceover_edit,
+    reactivate_edit,
+    deactivate_edit,
 )
 
 from .session_data import get_session_data, initialize_session_data, set_session_data
@@ -222,10 +224,45 @@ async def call_agent_async(query):
 CURRENT_FEATURE_ID = None
 
 
-def call_agent(query, feature_id=None):
+def call_agent(query, feature_id=None, user_id=None, session_id=None):
     """"""
     global CURRENT_FEATURE_ID
     CURRENT_FEATURE_ID = feature_id
+
+    agent_user_id = user_id or USER_ID
+    agent_session_id = session_id or SESSION_ID
+    
+    print(f"DEBUG agent.py: Using agent session: {agent_user_id}/{agent_session_id}")
+    
+    try:
+        existing_session = AGENT_RUNNER.session_service.get_session_sync(
+            app_name=APP_NAME,
+            user_id=agent_user_id,
+            session_id=agent_session_id
+        )
+        if not existing_session:
+            print(f"DEBUG agent.py: Creating new agent session: {agent_user_id}/{agent_session_id}")
+            AGENT_RUNNER.session_service.create_session_sync(
+                app_name=APP_NAME,
+                user_id=agent_user_id,
+                session_id=agent_session_id
+            )
+            from multi_tool_agent.session_data import initialize_session_data
+            initialize_session_data(APP_NAME, agent_user_id, agent_session_id, AGENT_RUNNER.session_service)
+            print(f"DEBUG agent.py: Initialized session data for new session")
+        else:
+            print(f"DEBUG agent.py: Using existing agent session")
+    except Exception as e:
+        print(f"DEBUG agent.py: Error checking/creating session: {e}")
+        print(f"DEBUG agent.py: Creating new agent session: {agent_user_id}/{agent_session_id}")
+        AGENT_RUNNER.session_service.create_session_sync(
+            app_name=APP_NAME,
+            user_id=agent_user_id,
+            session_id=agent_session_id
+        )
+        from multi_tool_agent.session_data import initialize_session_data
+        initialize_session_data(APP_NAME, agent_user_id, agent_session_id, AGENT_RUNNER.session_service)
+        print(f"DEBUG agent.py: Initialized session data for new session (error path)")
 
     parts = [types.Part(text=query)]
 
@@ -260,7 +297,7 @@ USER QUERY: {query}
     content = types.Content(role="user", parts=parts)
     print("Running agent...")
     events = AGENT_RUNNER.run(
-        user_id=USER_ID, session_id=SESSION_ID, new_message=content
+        user_id=agent_user_id, session_id=agent_session_id, new_message=content
     )
     print("Processing agent responses...")
     
@@ -290,8 +327,8 @@ USER QUERY: {query}
     try:
         session = AGENT_RUNNER.session_service.get_session_sync(
             app_name=APP_NAME, 
-            user_id=USER_ID, 
-            session_id=SESSION_ID
+            user_id=agent_user_id, 
+            session_id=agent_session_id
         )
         if session and hasattr(session, 'state'):
             print(f"DEBUG agent.py: Session state keys: {session.state.keys()}")
@@ -455,7 +492,14 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
        - Use `find_voiceover_edit()` to check if a voiceover already exists
     
     5. REMOVING EDITS:
-       - Call `remove_edit(edit_id)` to remove an edit and regenerate the video
+       - Call `remove_edit(edit_id)` ONLY when user explicitly asks to DELETE or REMOVE an edit
+       - Call `deactivate_edit(edit_id)` to temporarily disable an edit (marks as "reverted")
+    
+    6. TEXT OVERLAY CHANGES:
+       - When user wants to CHANGE text overlay content (e.g., "Change the text to X"):
+         JUST call `add_text_overlay_edit()` with the new text
+       - The function will AUTOMATICALLY mark old text overlays as "overwritten"
+       - DO NOT call `remove_edit()` before adding new text - this causes history loss
     
     CRITICAL: Always determine if the user wants to UPDATE an existing edit or ADD a new one before calling tools.
     """
@@ -656,6 +700,8 @@ def create_agent():
         remove_edit,
         get_edit_queue_info,
         find_voiceover_edit,
+        reactivate_edit,
+        deactivate_edit,
     ]
 
     name = "ai_editor_agent"

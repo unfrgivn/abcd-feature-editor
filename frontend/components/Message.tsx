@@ -20,6 +20,7 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
   const isPending = !isUser && activeRecommendation?.status === RecommendationStatus.PENDING;
   const isProcessing = !isUser && activeRecommendation?.status === RecommendationStatus.PROCESSING;
   const isRejected = !isUser && activeRecommendation?.status === RecommendationStatus.REJECTED;
+  const isEditQueueSuccess = !isUser && message.isEditQueueSuccess;
 
   const containerClasses = isUser ? 'flex justify-end' : 'flex justify-start';
   
@@ -33,7 +34,7 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
     bubbleClasses = 'bg-amber-50 border border-amber-200 text-gray-900 rounded-2xl shadow-sm';
   } else if (isRejected) {
     bubbleClasses = 'bg-red-50 border border-red-200 text-gray-900 rounded-2xl shadow-sm';
-  } else if (isAccepted) {
+  } else if (isAccepted || isEditQueueSuccess) {
     bubbleClasses = 'bg-green-50 border border-green-200 text-gray-900 rounded-2xl shadow-sm';
   }
   
@@ -70,6 +71,12 @@ const Message: React.FC<MessageProps> = ({ message, recommendation, onAcceptReco
                 <div className="flex items-center space-x-2 mb-2">
                   <CheckIcon />
                   <span className="text-xs font-semibold text-green-700 uppercase">Accepted</span>
+                </div>
+              )}
+              {isEditQueueSuccess && (
+                <div className="flex items-center space-x-2 mb-2">
+                  <CheckIcon />
+                  <span className="text-xs font-semibold text-green-700 uppercase">Done</span>
                 </div>
               )}
               {isProcessing && (

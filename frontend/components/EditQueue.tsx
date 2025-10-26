@@ -4,9 +4,24 @@ import { Edit, EditQueue as EditQueueType } from '../types';
 interface EditQueueProps {
   editQueue: EditQueueType | null;
   onRemoveEdit?: (editId: string) => void;
+  onReactivateEdit?: (editId: string) => void;
+  onDeactivateEdit?: (editId: string) => void;
 }
 
-export const EditQueue: React.FC<EditQueueProps> = ({ editQueue, onRemoveEdit }) => {
+export const EditQueue: React.FC<EditQueueProps> = ({ 
+  editQueue, 
+  onRemoveEdit, 
+  onReactivateEdit,
+  onDeactivateEdit 
+}) => {
+  console.log('DEBUG EditQueue: Received editQueue:', editQueue);
+  console.log('DEBUG EditQueue: Edit count:', editQueue?.edits?.length);
+  console.log('DEBUG EditQueue: Edits:', editQueue?.edits?.map(e => ({
+    id: e.id,
+    type: e.type,
+    status: e.status
+  })));
+  
   if (!editQueue || editQueue.edits.length === 0) {
     return null;
   }
@@ -31,7 +46,41 @@ export const EditQueue: React.FC<EditQueueProps> = ({ editQueue, onRemoveEdit })
     }
   };
 
-  const appliedEdits = editQueue.edits.filter(e => e.status === 'applied');
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case 'applied':
+        return '#4ade80';
+      case 'overwritten':
+        return '#666';
+      case 'reverted':
+        return '#888';
+      case 'superseded':
+        return '#777';
+      case 'pending':
+        return '#fbbf24';
+      default:
+        return '#999';
+    }
+  };
+
+  const getStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'applied':
+        return 'Active';
+      case 'overwritten':
+        return 'Replaced';
+      case 'reverted':
+        return 'Deactivated';
+      case 'superseded':
+        return 'Modified';
+      case 'pending':
+        return 'Pending';
+      default:
+        return status;
+    }
+  };
+
+  const activeCount = editQueue.edits.filter(e => e.status === 'applied').length;
 
   return (
     <div className="edit-queue-container" style={{
@@ -47,31 +96,48 @@ export const EditQueue: React.FC<EditQueueProps> = ({ editQueue, onRemoveEdit })
         fontWeight: '600',
         color: '#fff'
       }}>
-        Edit Queue ({appliedEdits.length} {appliedEdits.length === 1 ? 'edit' : 'edits'})
+        Edit Queue ({activeCount} active)
       </h3>
       
       <div className="edit-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {appliedEdits.map((edit, index) => (
+        {editQueue.edits.map((edit, index) => (
           <div
             key={edit.id}
             className="edit-item"
             style={{
-              backgroundColor: '#2a2a2a',
-              border: '1px solid #444',
+              backgroundColor: edit.status === 'applied' ? '#2a2a2a' : '#252525',
+              border: edit.status === 'applied' ? '1px solid #4ade80' : '1px solid #333',
               borderRadius: '6px',
               padding: '12px',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              opacity: edit.status === 'applied' ? 1 : 0.6
             }}
           >
             <div style={{ flex: 1 }}>
               <div style={{ 
-                fontSize: '12px', 
-                color: '#888',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
                 marginBottom: '4px'
               }}>
-                #{index + 1} · {edit.type}
+                <span style={{ 
+                  fontSize: '12px', 
+                  color: '#888'
+                }}>
+                  #{index + 1} · {edit.type}
+                </span>
+                <span style={{
+                  fontSize: '10px',
+                  color: getStatusColor(edit.status),
+                  backgroundColor: `${getStatusColor(edit.status)}22`,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  fontWeight: '600'
+                }}>
+                  {getStatusLabel(edit.status)}
+                </span>
               </div>
               <div style={{ 
                 fontSize: '13px', 
@@ -81,30 +147,140 @@ export const EditQueue: React.FC<EditQueueProps> = ({ editQueue, onRemoveEdit })
               </div>
             </div>
             
-            {onRemoveEdit && (
-              <button
-                onClick={() => onRemoveEdit(edit.id)}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: '1px solid #666',
-                  borderRadius: '4px',
-                  padding: '6px 12px',
-                  color: '#e0e0e0',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ff4444';
-                  e.currentTarget.style.borderColor = '#ff4444';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderColor = '#666';
-                }}
-              >
-                Remove
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {edit.status === 'applied' && (
+                <>
+                  {onDeactivateEdit && (
+                    <button
+                      onClick={() => onDeactivateEdit(edit.id)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid #666',
+                        borderRadius: '4px',
+                        padding: '6px 12px',
+                        color: '#e0e0e0',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = '#444';
+                        e.currentTarget.style.borderColor = '#888';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.borderColor = '#666';
+                      }}
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                  {onRemoveEdit && (
+                    <button
+                      onClick={() => onRemoveEdit(edit.id)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid #666',
+                        borderRadius: '4px',
+                        padding: '6px 12px',
+                        color: '#e0e0e0',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ff4444';
+                        e.currentTarget.style.borderColor = '#ff4444';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.borderColor = '#666';
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </>
+              )}
+              
+              {(edit.status === 'reverted' || edit.status === 'overwritten') && (
+                <>
+                  {onReactivateEdit && (
+                    <button
+                      onClick={() => onReactivateEdit(edit.id)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid #4ade80',
+                        borderRadius: '4px',
+                        padding: '6px 12px',
+                        color: '#4ade80',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = '#4ade8033';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      Reactivate
+                    </button>
+                  )}
+                  {onRemoveEdit && (
+                    <button
+                      onClick={() => onRemoveEdit(edit.id)}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid #666',
+                        borderRadius: '4px',
+                        padding: '6px 12px',
+                        color: '#888',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ff4444';
+                        e.currentTarget.style.borderColor = '#ff4444';
+                        e.currentTarget.style.color = '#fff';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.borderColor = '#666';
+                        e.currentTarget.style.color = '#888';
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </>
+              )}
+              
+              {edit.status === 'superseded' && onRemoveEdit && (
+                <button
+                  onClick={() => onRemoveEdit(edit.id)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid #666',
+                    borderRadius: '4px',
+                    padding: '6px 12px',
+                    color: '#888',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ff4444';
+                    e.currentTarget.style.borderColor = '#ff4444';
+                    e.currentTarget.style.color = '#fff';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.borderColor = '#666';
+                    e.currentTarget.style.color = '#888';
+                  }}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>

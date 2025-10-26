@@ -12,6 +12,7 @@ export interface Message {
   role: Role;
   text: string;
   media?: MediaAttachment;
+  isEditQueueSuccess?: boolean;
 }
 
 export interface Feature {
@@ -72,7 +73,7 @@ export interface SessionVersion {
 }
 
 export type EditType = 'voiceover' | 'text_overlay' | 'trim' | 'filter';
-export type EditStatus = 'pending' | 'applied' | 'reverted';
+export type EditStatus = 'pending' | 'applied' | 'reverted' | 'overwritten' | 'superseded';
 
 export interface Edit {
   id: string;

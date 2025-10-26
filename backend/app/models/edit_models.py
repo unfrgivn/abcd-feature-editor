@@ -4,7 +4,7 @@ from typing import Any, Literal, Optional
 
 
 EditType = Literal["voiceover", "text_overlay", "trim", "filter"]
-EditStatus = Literal["pending", "applied", "reverted"]
+EditStatus = Literal["pending", "applied", "reverted", "overwritten", "superseded"]
 
 
 @dataclass

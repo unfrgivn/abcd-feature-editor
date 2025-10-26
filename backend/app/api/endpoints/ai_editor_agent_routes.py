@@ -39,11 +39,18 @@ async def call_ai_editor_agent(userQuery: UserQuery):
 
         print(f"Calling agent with query: {userQuery.query}")
         
+        agent_user_id = None
+        agent_session_id = None
+        
         if userQuery.user_id and userQuery.session_id:
             from multi_tool_agent.session_data import set_frontend_session_info
             set_frontend_session_info(userQuery.user_id, userQuery.session_id, database_session_service)
+            
+            agent_user_id = userQuery.user_id
+            agent_session_id = userQuery.session_id
+            print(f"DEBUG: Using frontend session as agent session: {agent_user_id}/{agent_session_id}")
         
-        response = agent.call_agent(userQuery.query, userQuery.feature_id)
+        response = agent.call_agent(userQuery.query, userQuery.feature_id, agent_user_id, agent_session_id)
         print(f"Agent returned response type: {type(response)}, value: {repr(response)}")
         
         if not response:
@@ -317,8 +324,12 @@ async def get_edit_queue(
         
         import json
         if edit_queue_data:
+            print(f"DEBUG ai_editor_agent_routes.py: Retrieved edit queue with {len(edit_queue_data.get('edits', []))} edits")
+            for e in edit_queue_data.get('edits', []):
+                print(f"  Edit {e['id']}: type={e['type']}, status={e['status']}")
             return Response(content=json.dumps(edit_queue_data), status_code=200)
         else:
+            print(f"DEBUG ai_editor_agent_routes.py: No edit queue found for session")
             return Response(content=json.dumps(None), status_code=200)
     except Exception as ex:
         logging.error("Get edit queue - ERROR: %s", str(ex))
