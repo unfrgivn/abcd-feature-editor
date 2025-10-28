@@ -37,9 +37,11 @@ def add_voiceover_edit(tool_context, text: str, start_ms: int, original_video_ur
                 "message": "No video URL found in context or parameters"
             }
         
+        video_id = tool_context.state.get("video_id")
+        
         edit_queue = get_edit_queue()
         if not edit_queue:
-            edit_queue = initialize_edit_queue(original_video_url)
+            edit_queue = initialize_edit_queue(original_video_url, video_id)
         
         edit = Edit(
             id=str(uuid.uuid4()),
@@ -158,9 +160,11 @@ def add_text_overlay_edit(
                 "message": "No video URL found in context or parameters"
             }
         
+        video_id = tool_context.state.get("video_id")
+        
         edit_queue = get_edit_queue()
         if not edit_queue:
-            edit_queue = initialize_edit_queue(original_video_url)
+            edit_queue = initialize_edit_queue(original_video_url, video_id)
         
         for existing_edit in edit_queue.edits:
             if existing_edit.type == "text_overlay" and existing_edit.status == "applied":

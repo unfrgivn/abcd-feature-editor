@@ -1,5 +1,8 @@
 import React from 'react';
 import { Edit, EditQueue as EditQueueType } from '../types';
+import { TrashIcon } from './icons/TrashIcon';
+import { BanIcon } from './icons/BanIcon';
+import { RefreshIcon } from './icons/RefreshIcon';
 
 interface EditQueueProps {
   editQueue: EditQueueType | null;
@@ -109,13 +112,11 @@ export const EditQueue: React.FC<EditQueueProps> = ({
               border: edit.status === 'applied' ? '1px solid #4ade80' : '1px solid #333',
               borderRadius: '6px',
               padding: '12px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+              position: 'relative',
               opacity: edit.status === 'applied' ? 1 : 0.6
             }}
           >
-            <div style={{ flex: 1 }}>
+            <div style={{ paddingRight: '60px' }}>
               <div style={{ 
                 display: 'flex',
                 alignItems: 'center',
@@ -147,55 +148,67 @@ export const EditQueue: React.FC<EditQueueProps> = ({
               </div>
             </div>
             
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ 
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              display: 'flex', 
+              gap: '4px' 
+            }}>
               {edit.status === 'applied' && (
                 <>
                   {onDeactivateEdit && (
                     <button
                       onClick={() => onDeactivateEdit(edit.id)}
+                      title="Deactivate"
                       style={{
                         backgroundColor: 'transparent',
-                        border: '1px solid #666',
+                        border: 'none',
                         borderRadius: '4px',
-                        padding: '6px 12px',
-                        color: '#e0e0e0',
+                        padding: '6px',
+                        color: '#888',
                         cursor: 'pointer',
-                        fontSize: '12px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                       onMouseOver={(e) => {
                         e.currentTarget.style.backgroundColor = '#444';
-                        e.currentTarget.style.borderColor = '#888';
+                        e.currentTarget.style.color = '#e0e0e0';
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = '#666';
+                        e.currentTarget.style.color = '#888';
                       }}
                     >
-                      Deactivate
+                      <BanIcon />
                     </button>
                   )}
                   {onRemoveEdit && (
                     <button
                       onClick={() => onRemoveEdit(edit.id)}
+                      title="Remove"
                       style={{
                         backgroundColor: 'transparent',
-                        border: '1px solid #666',
+                        border: 'none',
                         borderRadius: '4px',
-                        padding: '6px 12px',
-                        color: '#e0e0e0',
+                        padding: '6px',
+                        color: '#888',
                         cursor: 'pointer',
-                        fontSize: '12px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                       onMouseOver={(e) => {
                         e.currentTarget.style.backgroundColor = '#ff4444';
-                        e.currentTarget.style.borderColor = '#ff4444';
+                        e.currentTarget.style.color = '#fff';
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = '#666';
+                        e.currentTarget.style.color = '#888';
                       }}
                     >
-                      Remove
+                      <TrashIcon />
                     </button>
                   )}
                 </>
@@ -206,14 +219,17 @@ export const EditQueue: React.FC<EditQueueProps> = ({
                   {onReactivateEdit && (
                     <button
                       onClick={() => onReactivateEdit(edit.id)}
+                      title="Reactivate"
                       style={{
                         backgroundColor: 'transparent',
-                        border: '1px solid #4ade80',
+                        border: 'none',
                         borderRadius: '4px',
-                        padding: '6px 12px',
+                        padding: '6px',
                         color: '#4ade80',
                         cursor: 'pointer',
-                        fontSize: '12px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                       onMouseOver={(e) => {
                         e.currentTarget.style.backgroundColor = '#4ade8033';
@@ -222,33 +238,34 @@ export const EditQueue: React.FC<EditQueueProps> = ({
                         e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
-                      Reactivate
+                      <RefreshIcon />
                     </button>
                   )}
                   {onRemoveEdit && (
                     <button
                       onClick={() => onRemoveEdit(edit.id)}
+                      title="Delete"
                       style={{
                         backgroundColor: 'transparent',
-                        border: '1px solid #666',
+                        border: 'none',
                         borderRadius: '4px',
-                        padding: '6px 12px',
-                        color: '#888',
+                        padding: '6px',
+                        color: '#666',
                         cursor: 'pointer',
-                        fontSize: '12px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                       onMouseOver={(e) => {
                         e.currentTarget.style.backgroundColor = '#ff4444';
-                        e.currentTarget.style.borderColor = '#ff4444';
                         e.currentTarget.style.color = '#fff';
                       }}
                       onMouseOut={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = '#666';
-                        e.currentTarget.style.color = '#888';
+                        e.currentTarget.style.color = '#666';
                       }}
                     >
-                      Delete
+                      <TrashIcon />
                     </button>
                   )}
                 </>
@@ -257,27 +274,28 @@ export const EditQueue: React.FC<EditQueueProps> = ({
               {edit.status === 'superseded' && onRemoveEdit && (
                 <button
                   onClick={() => onRemoveEdit(edit.id)}
+                  title="Delete"
                   style={{
                     backgroundColor: 'transparent',
-                    border: '1px solid #666',
+                    border: 'none',
                     borderRadius: '4px',
-                    padding: '6px 12px',
-                    color: '#888',
+                    padding: '6px',
+                    color: '#666',
                     cursor: 'pointer',
-                    fontSize: '12px'
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                   onMouseOver={(e) => {
                     e.currentTarget.style.backgroundColor = '#ff4444';
-                    e.currentTarget.style.borderColor = '#ff4444';
                     e.currentTarget.style.color = '#fff';
                   }}
                   onMouseOut={(e) => {
                     e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.borderColor = '#666';
-                    e.currentTarget.style.color = '#888';
+                    e.currentTarget.style.color = '#666';
                   }}
                 >
-                  Delete
+                  <TrashIcon />
                 </button>
               )}
             </div>

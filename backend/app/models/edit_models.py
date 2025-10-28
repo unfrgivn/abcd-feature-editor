@@ -30,6 +30,7 @@ class EditQueue:
     original_video_url: str
     edits: list[Edit]
     current_video_url: str
+    video_id: Optional[str] = None
     
     def add_edit(self, edit: Edit) -> None:
         self.edits.append(edit)
@@ -67,7 +68,8 @@ class EditQueue:
             "session_id": self.session_id,
             "original_video_url": self.original_video_url,
             "edits": [e.to_dict() for e in self.edits],
-            "current_video_url": self.current_video_url
+            "current_video_url": self.current_video_url,
+            "video_id": self.video_id
         }
     
     @classmethod
@@ -77,5 +79,6 @@ class EditQueue:
             session_id=data["session_id"],
             original_video_url=data["original_video_url"],
             edits=edits,
-            current_video_url=data["current_video_url"]
+            current_video_url=data["current_video_url"],
+            video_id=data.get("video_id")
         )

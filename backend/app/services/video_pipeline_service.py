@@ -1,6 +1,7 @@
 import logging
 import sys
 import os
+from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -30,7 +31,7 @@ class VideoPipelineService:
             logger.info(f"Rebuilding video from original with {len(applied_edits)} applied edits")
             for edit in applied_edits:
                 try:
-                    current_video_url = self.apply_single_edit(current_video_url, edit)
+                    current_video_url = self.apply_single_edit(current_video_url, edit, edit_queue.video_id)
                     edit.result_video_url = current_video_url
                     logger.info(f"Applied edit {edit.id} ({edit.type})")
                 except Exception as e:
@@ -44,11 +45,11 @@ class VideoPipelineService:
         
         return current_video_url
     
-    def apply_single_edit(self, video_url: str, edit: Edit) -> str:
+    def apply_single_edit(self, video_url: str, edit: Edit, video_id: Optional[str] = None) -> str:
         if edit.type == "voiceover":
             return self._apply_voiceover(video_url, edit)
         elif edit.type == "text_overlay":
-            return self._apply_text_overlay(video_url, edit)
+            return self._apply_text_overlay(video_url, edit, video_id)
         elif edit.type == "trim":
             return self._apply_trim(video_url, edit)
         elif edit.type == "filter":
@@ -83,7 +84,7 @@ class VideoPipelineService:
         
         return result["video_url"]
     
-    def _apply_text_overlay(self, video_url: str, edit: Edit) -> str:
+    def _apply_text_overlay(self, video_url: str, edit: Edit, video_id: Optional[str] = None) -> str:
         text = edit.params.get("text", "")
         start_ms = edit.params.get("start_ms", 0)
         end_ms = edit.params.get("end_ms", 3000)
@@ -101,7 +102,8 @@ class VideoPipelineService:
             duration=int(duration_seconds),
             fontsize=fontsize,
             color=color,
-            position=position
+            position=position,
+            video_id=video_id
         )
         
         if result["status"] != "success":

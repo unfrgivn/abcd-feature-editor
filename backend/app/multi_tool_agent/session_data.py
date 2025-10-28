@@ -140,7 +140,7 @@ def save_edit_queue(edit_queue: EditQueue) -> None:
     set_session_data("edit_queue", queue_dict)
 
 
-def initialize_edit_queue(original_video_url: str) -> EditQueue:
+def initialize_edit_queue(original_video_url: str, video_id: Optional[str] = None) -> EditQueue:
     """Initialize a new edit queue for the session."""
     user_id, session_id, service, is_frontend = _get_active_session_info()
     
@@ -148,7 +148,8 @@ def initialize_edit_queue(original_video_url: str) -> EditQueue:
         session_id=session_id,
         original_video_url=original_video_url,
         edits=[],
-        current_video_url=original_video_url
+        current_video_url=original_video_url,
+        video_id=video_id
     )
     
     if is_frontend:

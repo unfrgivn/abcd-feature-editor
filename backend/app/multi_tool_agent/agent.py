@@ -384,7 +384,12 @@ async def init_agent(
     
     if feature_config and feature_config.get("videoUrl"):
         video_url = feature_config["videoUrl"]
+        video_id = feature_config.get("videoId")
         print(f"Video URL: {video_url}")
+        print(f"Video ID: {video_id}")
+        
+        if video_id:
+            callback_context.state["video_id"] = video_id
 
         artifact_filename = "input_video.mp4"
 
@@ -523,18 +528,19 @@ def generate_dynamic_instruction(feature_config: Optional[dict] = None) -> str:
        b) IMMEDIATELY generate the actual media:
           * ALWAYS call `generate_speech_from_text` to create the audio file FIRST
           * Then ask the user to review the audio preview
-          * Ask if they want to add this voiceover to the video
+          * Ask if they want to add this to the video
           * WAIT for user confirmation (e.g., "Yes", "Sure", "Go ahead")
        
        c) Finally, call `get_current_recommendations` to retrieve and describe them
     
     WORKFLOW FOR USER CONFIRMATION:
-    When user confirms (says "Yes", "Sure", "Go ahead", etc.) to add the voiceover:
+    When user confirms (says "Yes", "Sure", "Go ahead", etc.) to add the recommendation:
     1. Get the current recommendations using `get_current_recommendations` to retrieve voice_message and start_at_milliseconds
     2. Extract the Video URL from the FEATURE CONTEXT section above (it's listed as "- Video URL: ...")
-     3. CRITICAL: Call `add_voiceover_edit(text=voice_message, start_ms=start_at_milliseconds)` - the video_url is automatically retrieved from the agent's context
-    4. The tool will return a new video_url - you MUST include this in your response media
-    5. DO NOT just say you've added it - actually call the tool and return the new video
+    3. CRITICAL: Call ONLY `add_voiceover_edit(text=voice_message, start_ms=start_at_milliseconds)` - the video_url is automatically retrieved from the agent's context
+    4. DO NOT call `add_text_overlay_edit` - text overlays are already in the video, only the voiceover is missing
+    5. The tool will return a new video_url - you MUST include this in your response media
+    6. DO NOT just say you've added it - actually call the tool and return the new video
     
     WORKFLOW FOR USER EDITS:
     When a user requests changes to audio:

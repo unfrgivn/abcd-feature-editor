@@ -89,14 +89,14 @@ class VideoEditingService:
         logger.info(f"Wrapped text into {len(lines)} lines, max width: {max_width}px")
         return lines
     
-    def _get_brand_color(self, video_url: str) -> str:
+    def _get_brand_color(self, video_id: str) -> str:
         config_path = os.path.join(os.path.dirname(__file__), "../config/config.json")
         with open(config_path, "r") as f:
             config_data = json.load(f)
         
         primary_brand_color = "#1e1e1e"
         for item in config_data:
-            if item.get("videoUrl") == video_url:
+            if item.get("videoId") == video_id:
                 primary_brand_color = item.get("primary_brand_color", "#1e1e1e")
                 break
         
@@ -110,7 +110,8 @@ class VideoEditingService:
         duration: int,
         fontsize: int = 70,
         color: str = "white",
-        position: str = "center"
+        position: str = "center",
+        video_id: Optional[str] = None
     ) -> dict[str, str]:
         try:
             input_video_path = self._download_video_from_gcs(video_url)
@@ -133,7 +134,10 @@ class VideoEditingService:
             
             logger.info(f"Created text file: {text_file_path}")
             
-            brand_color = self._get_brand_color(video_url)
+            if video_id:
+                brand_color = self._get_brand_color(video_id)
+            else:
+                brand_color = "#1e1e1e"
             brand_color_hex = brand_color.lstrip("#")
             alpha_hex = format(int(0.8 * 255), '02X')
             text_bg_color = f"0x{brand_color_hex}{alpha_hex}"
@@ -160,7 +164,7 @@ class VideoEditingService:
             logger.info(f"FFmpeg command: {' '.join(ffmpeg_command)}")
             subprocess.run(ffmpeg_command, check=True, capture_output=True)
             
-            logger.info(f"Text successfully overlaid on video")
+            logger.info("Text successfully overlaid on video")
             
             file_name = f"video_{datetime.datetime.now().timestamp()}.mp4"
             video_gcs_url = self._upload_video_to_gcs(output_video_path, file_name)
@@ -236,7 +240,7 @@ class VideoEditingService:
             ]
             
             subprocess.run(command, check=True, capture_output=True)
-            logger.info(f"Successfully added audio to video")
+            logger.info("Successfully added audio to video")
             
             file_name = f"video_{datetime.datetime.now().timestamp()}.mp4"
             video_gcs_url = self._upload_video_to_gcs(output_video_path, file_name)
